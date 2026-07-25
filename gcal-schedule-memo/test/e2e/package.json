@@ -1,0 +1,11 @@
+{
+  "name": "gcal-schedule-memo-e2e",
+  "private": true,
+  "description": "拡張機能のE2Eテスト。schedule-picker本体（manifest.json / src/*.js）は依存ゼロだが、実ブラウザでの動作検証だけはPlaywrightに依存する。出荷物には含まれない（gitignore済み）。",
+  "scripts": {
+    "test": "node picker.spec.js"
+  },
+  "devDependencies": {
+    "playwright": "^1.56.1"
+  }
+}
