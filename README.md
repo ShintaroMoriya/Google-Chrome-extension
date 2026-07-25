@@ -32,4 +32,4 @@
 - 状態は `schemaVersion` 付きで永続化し、状態更新は純粋関数に分離（Nodeからテスト可能に）
 - 依存ゼロ・ビルドなし、権限は最小限
 
-コピペで使えるプロンプトは [`assets/prompt_template.md`](https://github.com/ShintaroMoriya/claude-business-os/blob/main/skills/chrome_extension_ui/assets/prompt_template.md) にあります。
+コピペで使えるプロンプトは [`docs/new-extension-prompt.md`](./docs/new-extension-prompt.md) にあります（このリポジトリ内の実装から起こした版。穴埋め欄を埋めてそのまま貼り付けられます）。`claude-business-os` 側の [`assets/prompt_template.md`](https://github.com/ShintaroMoriya/claude-business-os/blob/main/skills/chrome_extension_ui/assets/prompt_template.md) も同じ趣旨のものです。
