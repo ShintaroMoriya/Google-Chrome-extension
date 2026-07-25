@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>期限みえるくん</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand">
+      <span class="brand-mark">KM</span>
+      <h1>期限みえるくん</h1>
+    </div>
+  </header>
+
+  <div class="legend">
+    <span class="chip chip-red">今日・超過</span>
+    <span class="chip chip-yellow">3日以内</span>
+    <span class="chip chip-green">余裕あり</span>
+  </div>
+
+  <div class="input-row">
+    <input type="text" id="taskTitle" placeholder="例：B社へ見積提出" />
+    <input type="date" id="taskDue" />
+    <button class="btn-primary" id="addBtn">追加</button>
+  </div>
+
+  <ul class="task-list" id="taskList"></ul>
+  <p class="empty" id="emptyMsg">期限を登録すると、ここに危険度順で並びます。</p>
+
+  <footer class="foot">
+    <button class="btn-ghost" id="clearDoneBtn">完了したものを片付ける</button>
+  </footer>
+
+  <script src="popup.js"></script>
+</body>
+</html>

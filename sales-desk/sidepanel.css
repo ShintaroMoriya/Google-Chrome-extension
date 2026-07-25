@@ -1,0 +1,240 @@
+:root {
+  --ink: #16243d;        /* 濃紺：文字・見出し */
+  --paper: #f6f7f9;      /* 背景 */
+  --card: #ffffff;       /* カード */
+  --accent: #e0492f;     /* 朱色：アクション */
+  --accent-soft: #fdeae5;
+  --line: #dde2ea;
+  --muted: #6b7686;
+  --ok: #1f7a4d;
+  font-size: 14px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic", sans-serif;
+  background: var(--paper);
+  color: var(--ink);
+  min-width: 280px;
+}
+
+/* ===== ヘッダー ===== */
+.app-header {
+  background: var(--ink);
+  color: #fff;
+  padding: 14px 16px 12px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.brand { display: flex; align-items: center; gap: 8px; }
+.brand-mark {
+  background: var(--accent);
+  color: #fff;
+  font-weight: 800;
+  font-size: 11px;
+  border-radius: 6px;
+  padding: 4px 6px;
+  letter-spacing: 0.5px;
+}
+.app-header h1 { font-size: 15px; font-weight: 700; }
+.date { font-size: 11px; opacity: 0.75; }
+
+/* ===== タブ ===== */
+.tabs {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  background: var(--ink);
+  padding: 0 8px;
+}
+.tab {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 9px 0 11px;
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+}
+.tab:hover { color: #fff; }
+.tab.is-active { color: #fff; border-bottom-color: var(--accent); }
+.tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* ===== パネル共通 ===== */
+.panel { display: none; padding: 14px 14px 20px; }
+.panel.is-active { display: block; }
+.panel-hint { font-size: 12px; color: var(--muted); margin-bottom: 12px; line-height: 1.6; }
+
+/* ===== ランチャー ===== */
+.launcher-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+.launch-card {
+  position: relative;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px 10px;
+  text-align: center;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 12.5px;
+  color: var(--ink);
+  transition: border-color 0.15s, transform 0.1s;
+}
+.launch-card:hover { border-color: var(--accent); transform: translateY(-1px); }
+.launch-card .emoji { display: block; font-size: 20px; margin-bottom: 4px; }
+.launch-card .del {
+  position: absolute;
+  top: 4px; right: 6px;
+  border: none; background: none;
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+  display: none;
+}
+.launch-card:hover .del { display: block; }
+.launch-card .del:hover { color: var(--accent); }
+
+/* ===== テンプレ ===== */
+.replace-bar {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.tpl-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+}
+.tpl-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.tpl-title { font-size: 13px; font-weight: 700; }
+.tpl-actions { display: flex; gap: 6px; }
+.tpl-body {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: pre-wrap;
+  line-height: 1.6;
+  max-height: 72px;
+  overflow: hidden;
+}
+.btn-copy {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.btn-copy:hover { filter: brightness(1.08); }
+.btn-copy.copied { background: var(--ok); }
+.btn-del {
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 5px 8px;
+  font-size: 11px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.btn-del:hover { color: var(--accent); border-color: var(--accent); }
+
+/* ===== メモ ===== */
+#memoArea {
+  width: 100%;
+  min-height: 280px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.7;
+  resize: vertical;
+  background: var(--card);
+}
+#memoArea:focus { outline: 2px solid var(--accent); border-color: transparent; }
+.save-status { font-size: 11px; color: var(--ok); margin-top: 6px; height: 14px; }
+
+/* ===== TODO ===== */
+.todo-input-row { display: flex; gap: 8px; margin-bottom: 12px; }
+.todo-input-row input { flex: 1; }
+.todo-list { list-style: none; margin-bottom: 14px; }
+.todo-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 9px 12px;
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+.todo-list li.done span { text-decoration: line-through; color: var(--muted); }
+.todo-list input[type="checkbox"] {
+  width: 16px; height: 16px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.todo-list span { flex: 1; }
+
+/* ===== フォーム部品 ===== */
+input[type="text"], input[type="url"], textarea {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  width: 100%;
+  background: var(--card);
+}
+input:focus, textarea:focus { outline: 2px solid var(--accent); border-color: transparent; }
+
+.btn-primary {
+  background: var(--ink);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.btn-primary:hover { background: var(--accent); }
+
+.btn-ghost {
+  background: none;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+  width: 100%;
+}
+.btn-ghost:hover { color: var(--accent); border-color: var(--accent); }
+
+.add-box { margin-top: 14px; }
+.add-box summary {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--accent);
+  cursor: pointer;
+  padding: 4px 0;
+}
+.add-form { display: grid; gap: 8px; margin-top: 8px; }

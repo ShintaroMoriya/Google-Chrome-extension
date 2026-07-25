@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "キーワード・ハイライター - 見逃しゼロの色付け",
+  "version": "1.0.0",
+  "description": "「至急」「クレーム」「期限」など登録した言葉を、開いたページ上で自動的に色付けします。Gmailの受信トレイでも重要メールがひと目で分かります。",
+  "permissions": ["storage"],
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "css": ["highlight.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "キーワード・ハイライター"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

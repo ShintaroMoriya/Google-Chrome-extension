@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>キーワード・ハイライター</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand">
+      <span class="brand-mark">KH</span>
+      <h1>キーワード・ハイライター</h1>
+    </div>
+    <label class="switch" title="オン / オフ">
+      <input type="checkbox" id="enabledToggle" checked />
+      <span class="slider"></span>
+    </label>
+  </header>
+
+  <p class="hint">登録した言葉が、開いたページの上で自動的に色付きになります。Gmailの受信トレイにも効きます。</p>
+
+  <div class="input-row">
+    <input type="text" id="newWord" placeholder="例：至急" />
+    <input type="color" id="newColor" value="#FFE066" title="色を選ぶ" />
+    <button class="btn-primary" id="addBtn">追加</button>
+  </div>
+
+  <ul class="kw-list" id="kwList"></ul>
+  <p class="empty" id="emptyMsg">まだキーワードがありません。「至急」「クレーム」「期限」などを登録してみましょう。</p>
+
+  <script src="popup.js"></script>
+</body>
+</html>

@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>セールスデスク</title>
+  <link rel="stylesheet" href="sidepanel.css" />
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand">
+      <span class="brand-mark">SD</span>
+      <h1>セールスデスク</h1>
+    </div>
+    <p class="date" id="todayDate"></p>
+  </header>
+
+  <nav class="tabs" role="tablist">
+    <button class="tab is-active" data-tab="launcher" role="tab">ツール</button>
+    <button class="tab" data-tab="templates" role="tab">テンプレ</button>
+    <button class="tab" data-tab="memo" role="tab">メモ</button>
+    <button class="tab" data-tab="todo" role="tab">TODO</button>
+  </nav>
+
+  <!-- ① クイックランチャー -->
+  <section class="panel is-active" id="panel-launcher">
+    <p class="panel-hint">よく使うツールをワンクリックで開けます。</p>
+    <div class="launcher-grid" id="launcherGrid"></div>
+
+    <details class="add-box">
+      <summary>＋ リンクを追加する</summary>
+      <div class="add-form">
+        <input type="text" id="newLinkName" placeholder="表示名（例：日報スプレッドシート）" />
+        <input type="url" id="newLinkUrl" placeholder="URL（https://〜）" />
+        <button class="btn-primary" id="addLinkBtn">追加</button>
+      </div>
+    </details>
+  </section>
+
+  <!-- ② メールテンプレ -->
+  <section class="panel" id="panel-templates">
+    <p class="panel-hint">「コピー」を押してメールに貼り付けるだけ。<br>{会社名} {名前} は下の欄で一括置換できます。</p>
+    <div class="replace-bar">
+      <input type="text" id="varCompany" placeholder="会社名" />
+      <input type="text" id="varName" placeholder="相手の名前" />
+    </div>
+    <div id="templateList"></div>
+
+    <details class="add-box">
+      <summary>＋ テンプレを追加する</summary>
+      <div class="add-form">
+        <input type="text" id="newTplTitle" placeholder="テンプレ名（例：アポお礼）" />
+        <textarea id="newTplBody" rows="5" placeholder="本文。{会社名} {名前} が使えます。"></textarea>
+        <button class="btn-primary" id="addTplBtn">追加</button>
+      </div>
+    </details>
+  </section>
+
+  <!-- ③ クイックメモ -->
+  <section class="panel" id="panel-memo">
+    <p class="panel-hint">自動保存されます。電話メモや申し送りに。</p>
+    <textarea id="memoArea" placeholder="ここに自由にメモ。書いた瞬間に保存されます。"></textarea>
+    <p class="save-status" id="memoStatus"></p>
+  </section>
+
+  <!-- ④ TODO -->
+  <section class="panel" id="panel-todo">
+    <p class="panel-hint">今日やることだけ。終わったらチェック。</p>
+    <div class="todo-input-row">
+      <input type="text" id="newTodoText" placeholder="例：A社へ見積送付" />
+      <button class="btn-primary" id="addTodoBtn">追加</button>
+    </div>
+    <ul class="todo-list" id="todoList"></ul>
+    <button class="btn-ghost" id="clearDoneBtn">完了したものを片付ける</button>
+  </section>
+
+  <script src="sidepanel.js"></script>
+</body>
+</html>

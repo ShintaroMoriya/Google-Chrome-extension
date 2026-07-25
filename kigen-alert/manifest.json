@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "期限みえるくん - 営業の期限アラート",
+  "version": "1.0.0",
+  "description": "見積・提出・フォローの期限を登録すると、アイコンバッジの色と数字で危険度がパッと分かります。当日は赤、3日前から黄色で警告。",
+  "permissions": ["storage", "alarms", "notifications"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "期限みえるくん"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

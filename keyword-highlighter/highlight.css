@@ -1,0 +1,7 @@
+/* キーワード・ハイライターの共通スタイル */
+.kwhl-mark {
+  color: #16243d !important;
+  font-weight: 700;
+  border-radius: 3px;
+  padding: 0 2px;
+}
