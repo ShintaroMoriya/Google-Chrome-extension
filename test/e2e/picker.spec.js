@@ -137,6 +137,22 @@ async function main() {
       return page.locator('#gcal-schedule-memo-host .entry-text').allTextContents();
     }
 
+    /**
+     * ホバープレビュー（枠+ラベル）の現在の表示状態を読む。
+     * @returns {Promise<{boxVisible: boolean, labelText: string}>}
+     */
+    async function previewState() {
+      return page.evaluate(() => {
+        const host = document.getElementById('gcal-schedule-memo-preview-host');
+        const box = host.shadowRoot.querySelector('.box');
+        const label = host.shadowRoot.querySelector('.label');
+        return {
+          boxVisible: getComputedStyle(box).display !== 'none',
+          labelText: label.textContent
+        };
+      });
+    }
+
     await check('アイコンクリックでパネルが表示され取得モードがONになる', async () => {
       await toggleViaIcon();
       await page.waitForTimeout(150);
@@ -146,6 +162,15 @@ async function main() {
       assert.equal(visible, true);
       const pick = await page.evaluate(() => document.documentElement.getAttribute('data-gsm-pick'));
       assert.equal(pick, 'on');
+    });
+
+    await check('チップにカーソルを合わせると、クリックで追加される内容と同じ文言でプレビューされる', async () => {
+      const chipBox = await page.locator('.chip').boundingBox();
+      await page.mouse.move(chipBox.x + chipBox.width / 2, chipBox.y + chipBox.height / 2);
+      await page.waitForTimeout(80); // requestAnimationFrame 1回分の猶予
+      const { boxVisible, labelText } = await previewState();
+      assert.equal(boxVisible, true);
+      assert.equal(labelText, '7月25日(土) 10:00〜11:00');
     });
 
     await check('予定チップをクリックすると一覧に追加され、詳細ポップアップは開かない', async () => {
@@ -159,6 +184,15 @@ async function main() {
       assert.equal(popupVisible, false, '横取りに失敗し詳細ポップアップが開いてしまっている');
     });
 
+    await check('空き枠にカーソルを合わせると、実際にクリックした場合と同じ時刻がプレビュー表示される', async () => {
+      const colBox = await page.locator('[data-testid="col-2026-07-26"]').boundingBox();
+      await page.mouse.move(colBox.x + 30, colBox.y + 672); // 14:00相当（下のクリック位置と同一座標）
+      await page.waitForTimeout(80);
+      const { boxVisible, labelText } = await previewState();
+      assert.equal(boxVisible, true);
+      assert.equal(labelText, '7月26日(日) 14:00〜15:00');
+    });
+
     await check('空き枠をクリックすると時刻付きで追加され、予定作成バブルは開かない', async () => {
       await page.locator('[data-testid="col-2026-07-26"]').click({ position: { x: 30, y: 672 } }); // 14:00相当
       await page.waitForTimeout(100);
@@ -168,6 +202,18 @@ async function main() {
         () => getComputedStyle(document.getElementById('create-bubble')).display !== 'none'
       );
       assert.equal(bubbleVisible, false, '横取りに失敗し予定作成バブルが開いてしまっている');
+    });
+
+    await check('グリッド外にカーソルを移すとプレビューは消える', async () => {
+      // #main はflexコンテナで幅いっぱいに広がるため、(5,5)のような単純な
+      // 座標は実際にはグリッド内になってしまう。#main の矩形の外側
+      // （右側の余白）へ確実に出す。
+      const mainBox = await page.locator('#main').boundingBox();
+      const outsideX = mainBox.x + mainBox.width + 20;
+      await page.mouse.move(outsideX, 5);
+      await page.waitForTimeout(80);
+      const { boxVisible } = await previewState();
+      assert.equal(boxVisible, false);
     });
 
     await check('同じ枠を2回目クリックしても重複追加されない', async () => {
@@ -253,11 +299,18 @@ async function main() {
       assert.equal(texts.length, 0);
     });
 
-    await check('ESCで取得モードがOFFになり、通常のカレンダー操作に戻る', async () => {
+    await check('ESCで取得モードがOFFになり、プレビューも消え、通常のカレンダー操作に戻る', async () => {
+      // ESC前にプレビューが出ている状態を作ってから押す。
+      const chipBox = await page.locator('.chip').boundingBox();
+      await page.mouse.move(chipBox.x + chipBox.width / 2, chipBox.y + chipBox.height / 2);
+      await page.waitForTimeout(80);
+      assert.equal((await previewState()).boxVisible, true, '前提: ESC前はプレビューが出ているはず');
+
       await page.keyboard.press('Escape');
       await page.waitForTimeout(100);
       const pick = await page.evaluate(() => document.documentElement.getAttribute('data-gsm-pick'));
       assert.equal(pick, 'off');
+      assert.equal((await previewState()).boxVisible, false, 'ESC後はプレビューも消えているはず');
 
       await page.locator('[data-testid="col-2026-07-26"]').click({ position: { x: 30, y: 200 } });
       await page.waitForTimeout(100);

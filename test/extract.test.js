@@ -7,6 +7,7 @@ const {
   isExcludedChip,
   extractFromChip,
   resolveDateColumn,
+  resolveSlotPreview,
   extractFromSlot
 } = require('../src/extract.js');
 
@@ -246,6 +247,50 @@ module.exports = [
       const doc = fakeDoc(el({}), []);
       const result = extractFromSlot({ clientX: 5, clientY: 20, target: noDatekeyTarget }, doc, {});
       assert.ok(result.error);
+    }
+  },
+  {
+    name: 'resolveSlotPreview: pickはextractFromSlotと完全一致し、枠rectは列幅×snap後の時間帯の高さになる（WYSIWYG）',
+    fn: () => {
+      const PX_PER_HOUR = 48;
+      const ORIGIN_Y = 100;
+      const hourLabels = [9, 10, 11].map((h) =>
+        el({ textContent: `午前${h}時`, rect: { top: ORIGIN_Y + h * PX_PER_HOUR, left: 0, width: 20, height: 12 } })
+      );
+      const body = el({ children: hourLabels });
+      const column = el({
+        attrs: { 'data-datekey': '28921' },
+        rect: { top: ORIGIN_Y, left: 40, width: 100, height: PX_PER_HOUR * 24 }
+      });
+      const doc = fakeDoc(body, [column]);
+      const clickEvent = { clientX: 5, clientY: ORIGIN_Y + 10.25 * PX_PER_HOUR, target: column };
+      const options = { durationMin: 60, snapMin: 15 };
+
+      const viaExtract = extractFromSlot(clickEvent, doc, options);
+      const preview = resolveSlotPreview(clickEvent, doc, options);
+
+      assert.deepEqual(preview.pick, viaExtract);
+      assert.equal(preview.pick.sh, 10);
+      assert.equal(preview.pick.sm, 15);
+      assert.equal(preview.pick.eh, 11);
+      assert.equal(preview.pick.em, 15);
+
+      // 枠は列の左端・幅をそのまま使い、高さは60分ぶん(=1時間=pxPerHour)。
+      assert.equal(preview.rect.left, 40);
+      assert.equal(preview.rect.width, 100);
+      assert.ok(Math.abs(preview.rect.height - PX_PER_HOUR) < 0.001);
+      // 開始10:15の位置 = ORIGIN_Y + 10.25h * 48px/h
+      assert.ok(Math.abs(preview.rect.top - (ORIGIN_Y + 10.25 * PX_PER_HOUR)) < 0.001);
+    }
+  },
+  {
+    name: 'resolveSlotPreview: エラー時はrectがnullで、pickにerrorを持つ',
+    fn: () => {
+      const noDatekeyTarget = el({});
+      const doc = fakeDoc(el({}), []);
+      const result = resolveSlotPreview({ clientX: 5, clientY: 20, target: noDatekeyTarget }, doc, {});
+      assert.ok(result.pick.error);
+      assert.equal(result.rect, null);
     }
   }
 ];

@@ -27,6 +27,7 @@
         "src/extract.js",
         "src/store.js",
         "src/panel.js",
+        "src/preview.js",
         "src/content.js"
       ],
       "run_at": "document_idle",

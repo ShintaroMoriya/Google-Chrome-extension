@@ -233,19 +233,26 @@ function collectHourLabelPoints(gridRoot) {
 }
 
 /**
- * 空きマスのクリックから日時エントリを抽出する。
+ * 空きマスの clientX/Y から、追加される予定の値(pick)と、それを画面上で
+ * ハイライト表示するための矩形(rect)を1回の幾何計算でまとめて返す。
+ *
+ * extractFromSlot（クリック確定）とホバープレビュー（preview.js）の両方が
+ * この関数だけを呼ぶことで、"プレビューで見えていた時刻" と
+ * "クリックで実際に追加される時刻" が計算上ずれることのないようにしている
+ * （幾何モデルを2箇所に実装しないことでWYSIWYGを保証する）。
  * @param {{clientX:number, clientY:number, target:Element}} clickEvent
  * @param {Document} doc
  * @param {{durationMin?:number, snapMin?:number}} [options]
- * @returns {object} Pick または {error: string}
+ * @returns {{pick: object, rect: ?{top:number,left:number,width:number,height:number}}}
+ *   pick は Pick または {error: string}。エラー時 rect は null。
  */
-function extractFromSlot(clickEvent, doc, options) {
+function resolveSlotPreview(clickEvent, doc, options) {
   const durationMin = (options && options.durationMin) || CONFIG.DEFAULT_DURATION_MIN;
   const snapMin = (options && options.snapMin) || CONFIG.SNAP_MIN;
 
   const columnHit = resolveDateColumn(clickEvent.target, clickEvent.clientX, clickEvent.clientY, doc);
   if (!columnHit) {
-    return { error: '日付列を特定できませんでした' };
+    return { pick: { error: '日付列を特定できませんでした' }, rect: null };
   }
 
   const rect = columnHit.el.getBoundingClientRect();
@@ -253,26 +260,26 @@ function extractFromSlot(clickEvent, doc, options) {
   const geometry = buildGridGeometry(rect, hourPoints);
 
   if (looksLikeAllDayRow(rect, geometry.pxPerHour)) {
-    return { error: '終日の行では時刻を指定できません' };
+    return { pick: { error: '終日の行では時刻を指定できません' }, rect: null };
   }
 
   const rawMinutes = yToMinutes(clickEvent.clientY, geometry);
   const snapped = snapMinutes(rawMinutes, snapMin);
   const start = minutesToHm(snapped);
   if (!start) {
-    return { error: 'クリック位置から時刻を算出できませんでした' };
+    return { pick: { error: 'クリック位置から時刻を算出できませんでした' }, rect: null };
   }
 
   const endMinutes = snapped + durationMin;
   const end = minutesToHm(endMinutes);
   if (!end) {
-    return { error: '所要時間が日をまたぐため対象外です' };
+    return { pick: { error: '所要時間が日をまたぐため対象外です' }, rect: null };
   }
 
   const confidence = geometry.confidence;
   const warning = confidence === 'high' ? undefined : '時刻を画面上の位置から推定しました';
 
-  return {
+  const pick = {
     y: columnHit.decoded.y,
     m: columnHit.decoded.m,
     d: columnHit.decoded.d,
@@ -284,6 +291,26 @@ function extractFromSlot(clickEvent, doc, options) {
     source: 'slot',
     warning
   };
+
+  const boxRect = {
+    left: rect.left,
+    width: rect.width,
+    top: geometry.originY + (snapped / 60) * geometry.pxPerHour,
+    height: (durationMin / 60) * geometry.pxPerHour
+  };
+
+  return { pick, rect: boxRect };
+}
+
+/**
+ * 空きマスのクリックから日時エントリを抽出する。
+ * @param {{clientX:number, clientY:number, target:Element}} clickEvent
+ * @param {Document} doc
+ * @param {{durationMin?:number, snapMin?:number}} [options]
+ * @returns {object} Pick または {error: string}
+ */
+function extractFromSlot(clickEvent, doc, options) {
+  return resolveSlotPreview(clickEvent, doc, options).pick;
 }
 
 // ---------------------------------------------------------------------------
@@ -297,6 +324,7 @@ const api = {
   extractFromChip,
   resolveDateColumn,
   collectHourLabelPoints,
+  resolveSlotPreview,
   extractFromSlot
 };
 if (typeof module !== 'undefined' && module.exports) {

@@ -7,6 +7,10 @@
  *      空きマスのクリックを横取りし、日時を抽出してメモに追加する
  *   3) 通常のカレンダー操作（詳細表示・予定作成）は、取得モードOFFの間は
  *      一切妨げない
+ *   4) 取得モード中はカーソル移動に合わせて「これから追加される時間帯」を
+ *      枠でプレビュー表示する（preview.js）。クリック確定時はプレビューと
+ *      同じ計算関数（extract.js の resolveSlotPreview/extractFromChip）を
+ *      使い、見えていた枠と結果が食い違わないようにする（WYSIWYG）。
  *
  * 設計上の制約（クリック横取りの安全策）:
  *   - `pointerdown` に `preventDefault()` は絶対に呼ばない。
@@ -28,11 +32,15 @@
   const formatApi = globalThis.GSM.format;
   const storeApi = globalThis.GSM.store;
   const panelApi = globalThis.GSM.panel;
+  const previewApi = globalThis.GSM.preview;
 
   const storage = storeApi.createStorage();
   let state = storeApi.freshState();
   let panel = null;
+  let preview = null;
   let saveTimer = null;
+  let previewRaf = null;
+  let lastPointerMoveEvent = null;
 
   /**
    * 状態の保存をデバウンスする（連続クリック時に毎回書き込まない）。
@@ -50,6 +58,9 @@
     state = next;
     if (panel) panel.render(state);
     applyPickModeAttr();
+    // 取得モードOFF（パネル非表示を含む）になったら、プレビューも必ず消す
+    // （「知らないうちに横取りされている」状態を作らないのと同じ理由）。
+    if (preview && !state.panel.pickMode) preview.hide();
     scheduleSave();
   }
 
@@ -163,6 +174,67 @@
   }
 
   /**
+   * カーソル位置から「クリックしたら追加される内容」を計算し、枠でプレビュー
+   * 表示する。extractFromChip / resolveSlotPreview はクリック確定時にも
+   * 使う同一の関数なので、ここで見えている枠・時刻がそのままクリック結果に
+   * なる（別ロジックを持たないことでWYSIWYGを保証している）。
+   * @param {{clientX:number, clientY:number, target:Element}} e
+   */
+  function updatePreview(e) {
+    if (!preview) return;
+    if (!state.panel.pickMode || isOurs(e) || !inGrid(e.target)) {
+      preview.hide();
+      return;
+    }
+
+    const chip = e.target.closest ? e.target.closest(extractApi.CONFIG.CHIP_SELECTOR) : null;
+    if (chip) {
+      const pick = extractApi.extractFromChip(chip);
+      if (pick.error) {
+        preview.hide();
+        return;
+      }
+      preview.showAt(chip.getBoundingClientRect(), formatApi.formatEntry(pick), pick.confidence);
+      return;
+    }
+
+    const slot = extractApi.resolveSlotPreview(
+      { clientX: e.clientX, clientY: e.clientY, target: e.target },
+      document,
+      { durationMin: state.settings.durationMin, snapMin: state.settings.snapMin }
+    );
+    if (slot.pick.error) {
+      preview.hide();
+      return;
+    }
+    preview.showAt(slot.rect, formatApi.formatEntry(slot.pick), slot.pick.confidence);
+  }
+
+  /**
+   * pointermove を requestAnimationFrame でスロットルする。
+   * 幾何計算（時刻目盛りラベルの走査を含む）を毎フレーム行っても
+   * 数msのコストなので、キャッシュはせず常に最新のDOMから再計算する
+   * （スクロール・リサイズ・ビュー切替を気にしなくてよい設計にするため）。
+   * @param {PointerEvent} e
+   */
+  function onPointerMove(e) {
+    lastPointerMoveEvent = e;
+    if (previewRaf) return;
+    previewRaf = requestAnimationFrame(() => {
+      previewRaf = null;
+      if (lastPointerMoveEvent) updatePreview(lastPointerMoveEvent);
+    });
+  }
+
+  /**
+   * カーソルがページ外に出たらプレビューを隠す。
+   */
+  function onPointerLeaveDoc() {
+    lastPointerMoveEvent = null;
+    if (preview) preview.hide();
+  }
+
+  /**
    * captureフェーズの横取りハンドラ本体。
    * @param {Event} e
    */
@@ -237,6 +309,8 @@
       onCloseClick: () => setState(storeApi.setPanel(state, { visible: false, pickMode: false }))
     });
 
+    preview = previewApi.createPreview();
+
     storeApi.loadState(storage).then((loaded) => {
       state = loaded;
       panel.render(state);
@@ -247,6 +321,11 @@
       window.addEventListener(type, onCapture, { capture: true });
     });
     window.addEventListener('keydown', onKeydown, { capture: true });
+
+    // プレビューはクリックを一切妨げないため、捕捉フェーズではなく通常の
+    // パッシブリスナーでよい（preventDefault/stopPropagationを一切呼ばない）。
+    window.addEventListener('pointermove', onPointerMove, { passive: true });
+    document.addEventListener('mouseleave', onPointerLeaveDoc);
 
     new MutationObserver(ensureAttached).observe(document.documentElement, { childList: true });
     // SPAナビゲーションの保険（コストは無視できる）。
