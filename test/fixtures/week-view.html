@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<!--
+  test/fixtures/week-view.html — Googleカレンダー週表示を模した静的フィクスチャ
+
+  目的:
+    実際のGoogleカレンダーにログインできないこのコンテナ内でも、
+    拡張機能のクリック横取り・抽出・パネルUIをPlaywrightで検証できるように、
+    src/extract.js が依拠する最小限のDOM構造（data-datekey / data-eventid /
+    .XuJrye ラベル / 時刻目盛りラベル / 列の矩形）だけを再現する。
+
+    これはGoogleの実DOMそのものではない（できない）。あくまで
+    「拡張機能側のロジックが、想定した構造に対して正しく動くか」を
+    確認するためのもの。実際のGoogleカレンダーに対する動作確認は
+    README.md のチェックリストに従ってユーザーが手動で行う。
+
+  日付の対応:
+    2026-07-25(土) の datekey は 28921
+    （ ((2026-1970)<<9) | (7<<5) | 25 = 28672+224+25 = 28921 ）
+-->
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>週表示フィクスチャ</title>
+<style>
+  html, body { margin: 0; padding: 0; font-family: sans-serif; }
+  /* 1時間=48px、0:00の位置は各列top:0を基準にする。 */
+  #main { display: flex; }
+  .day-col {
+    position: relative;
+    width: 140px;
+    height: 1152px; /* 24 * 48px */
+    border-right: 1px solid #ddd;
+  }
+  .hour-label {
+    position: absolute;
+    left: -40px;
+    width: 36px;
+    font-size: 10px;
+    color: #666;
+  }
+  .chip {
+    position: absolute;
+    left: 4px;
+    right: 4px;
+    background: #1a73e8;
+    color: #fff;
+    border-radius: 4px;
+    font-size: 11px;
+    overflow: hidden;
+  }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
+</style>
+</head>
+<body>
+  <!-- 時刻目盛りレール（列の外、左端に固定表示という想定のダミー配置） -->
+  <div id="hour-rail" style="position: relative; width: 40px;">
+    <div class="hour-label" style="top: 384px;">午前8時</div>
+    <div class="hour-label" style="top: 432px;">午前9時</div>
+    <div class="hour-label" style="top: 480px;">午前10時</div>
+    <div class="hour-label" style="top: 528px;">午前11時</div>
+    <div class="hour-label" style="top: 576px;">午後0時</div>
+    <div class="hour-label" style="top: 624px;">午後1時</div>
+    <div class="hour-label" style="top: 672px;">午後2時</div>
+    <div class="hour-label" style="top: 720px;">午後3時</div>
+  </div>
+
+  <div id="main" role="main">
+    <!-- 2026-07-25(土) 列。datekey=28921。予定チップを1つ含む。 -->
+    <div class="day-col" data-datekey="28921" role="gridcell" data-testid="col-2026-07-25">
+      <div class="chip"
+           data-eventid="dGVzdC1ldmVudC1pZCB0ZXN0QGV4YW1wbGUuY29t"
+           role="button"
+           style="top: 480px; height: 48px;">
+        <div class="sr-only XuJrye">午前10:00〜午前11:00、テスト打ち合わせ、会議室A、2026年7月25日</div>
+        <div aria-hidden="true">10 – 11</div>
+      </div>
+    </div>
+
+    <!-- 2026-07-26(日) 列。空き枠クリック検証用（チップなし）。 -->
+    <div class="day-col" data-datekey="28922" role="gridcell" data-testid="col-2026-07-26"></div>
+
+    <!-- 終日行として使うダミー列（高さが極端に低い）。 -->
+    <div class="day-col" data-datekey="28923" role="gridcell" style="height: 40px;" data-testid="col-allday"></div>
+  </div>
+
+  <!-- 予定作成バブルのダミー（クリック横取りが機能していれば絶対に表示されない）。 -->
+  <div id="create-bubble" role="dialog" style="display:none; position:fixed; top:10px; left:10px; background:#fff; border:1px solid #333; padding:8px;">
+    予定を作成
+  </div>
+  <div id="detail-popup" role="dialog" style="display:none; position:fixed; top:10px; left:200px; background:#fff; border:1px solid #333; padding:8px;">
+    予定の詳細
+  </div>
+
+  <script>
+    // Googleカレンダーの挙動を模した「素の」クリックハンドラ。
+    // 拡張機能が横取りに失敗した場合、これらが発火してしまう
+    // （＝横取り成功の判定に使う）。
+    document.querySelectorAll('.chip').forEach((chip) => {
+      chip.addEventListener('click', () => {
+        document.getElementById('detail-popup').style.display = 'block';
+      });
+    });
+    document.querySelectorAll('.day-col').forEach((col) => {
+      col.addEventListener('click', (e) => {
+        if (e.target.closest('.chip')) return;
+        document.getElementById('create-bubble').style.display = 'block';
+      });
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,41 @@
+{
+  "manifest_version": 3,
+  "name": "カレンダー日程メモ",
+  "version": "1.0.0",
+  "description": "Googleカレンダーの予定チップや空き枠をクリックして候補日時を最大5件集め、ワンクリックでGmailに貼れる形式でコピーします。",
+  "permissions": ["storage"],
+  "host_permissions": ["https://calendar.google.com/*"],
+  "action": {
+    "default_title": "日程メモ 表示/非表示（クリックで開閉）",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://calendar.google.com/*"],
+      "js": [
+        "src/format.js",
+        "src/datekey.js",
+        "src/timeparse.js",
+        "src/geometry.js",
+        "src/extract.js",
+        "src/store.js",
+        "src/panel.js",
+        "src/content.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ],
+  "icons": {
+    "16": "icons/icon-16.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  }
+}

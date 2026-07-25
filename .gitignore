@@ -1,0 +1,9 @@
+# Node（テスト実行時に生成されるもの）
+node_modules/
+
+# probeの出力（ユーザーの実カレンダー情報を含むため絶対にコミットしない）
+probe-output*.json
+*.probe.json
+
+# OS
+.DS_Store
