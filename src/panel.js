@@ -26,7 +26,7 @@
 
 const Z_INDEX = 2147483000;
 
-const CONFIDENCE_LABEL = { high: null, medium: '推定', low: '要確認' };
+const CONFIDENCE_LABEL = { high: null, medium: null, low: '要確認' };
 
 /**
  * 波ダッシュ等の書式ユーティリティを取得する（ブラウザ/Node両対応）。
