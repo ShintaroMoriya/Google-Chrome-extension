@@ -19,3 +19,17 @@
 2. そのディレクトリの中だけで `manifest.json` ・ソース・テストを完結させる（他の拡張機能と依存関係を共有しない）
 3. 上の一覧表に1行追加する
 4. `claude-business-os` の `knowledge/product/` にプロダクト管理ドキュメントを作成し、`decisions/` に採用理由を記録する
+
+### UI/UXは既存の型に従う
+
+拡張機能のUI/UXは、`gcal-schedule-memo` で確立した設計を型として固定しています。ゼロから設計し直さず、[`claude-business-os/skills/chrome_extension_ui/SKILL.md`](https://github.com/ShintaroMoriya/claude-business-os/blob/main/skills/chrome_extension_ui/SKILL.md) の **Design System 14項目**に従ってください。要点だけ挙げると:
+
+- ブラウザアクションのポップアップではなく、**Shadow DOMで隔離したページ内フローティングパネル**
+- 「取得モード」を明示的な状態として持ち、**パネル非表示中はクリック横取りを一切行わない**（Escでモードのみ解除）
+- ホバー時に「クリックしたら何が起きるか」を枠でプレビューし、**プレビューと確定は同一の計算関数**を呼ぶ（WYSIWYGを構造で保証）
+- 確度（high/medium/low）を持たせ、**確実に取れない値は捏造しない**
+- 破壊的操作は2度押し、すべての操作に即時フィードバック
+- 状態は `schemaVersion` 付きで永続化し、状態更新は純粋関数に分離（Nodeからテスト可能に）
+- 依存ゼロ・ビルドなし、権限は最小限
+
+コピペで使えるプロンプトは [`assets/prompt_template.md`](https://github.com/ShintaroMoriya/claude-business-os/blob/main/skills/chrome_extension_ui/assets/prompt_template.md) にあります。
