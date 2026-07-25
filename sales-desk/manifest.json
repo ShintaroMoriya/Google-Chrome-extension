@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "セールスデスク - 営業サイドパネル",
+  "version": "1.0.0",
+  "description": "ワンクリックで開く営業の作業台。よく使うツール・メールテンプレ・メモ・TODOをサイドパネルに集約します。",
+  "permissions": ["sidePanel", "storage"],
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "action": {
+    "default_title": "セールスデスクを開く"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}
