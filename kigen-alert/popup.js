@@ -2,19 +2,13 @@
 
 const $ = (sel) => document.querySelector(sel);
 const store = chrome.storage.local;
+const { daysUntil, localDateKey } = KigenDate;
 let tasks = [];
 
 function escapeHtml(s) {
   return s.replace(/[&<>"']/g, (c) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
   }[c]));
-}
-
-function daysUntil(dateStr) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const due = new Date(dateStr + "T00:00:00");
-  return Math.round((due - today) / 86400000);
 }
 
 function levelOf(task) {
@@ -108,7 +102,7 @@ $("#clearDoneBtn").addEventListener("click", () => {
 });
 
 // 初期表示：日付欄は今日をデフォルトに
-$("#taskDue").value = new Date().toISOString().slice(0, 10);
+$("#taskDue").value = localDateKey();
 
 store.get("tasks", (data) => {
   tasks = data.tasks || [];

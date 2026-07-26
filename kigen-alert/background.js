@@ -1,15 +1,10 @@
 /* 期限みえるくん - バックグラウンド
    30分ごとに期限をチェックして、バッジの色・数字・通知を更新します。 */
 
-const CHECK_ALARM = "kigen-check";
+importScripts('date.js');
+const { daysUntil, localDateKey } = KigenDate;
 
-// 危険度の判定（日数差を返す。0=今日、マイナス=超過）
-function daysUntil(dateStr) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const due = new Date(dateStr + "T00:00:00");
-  return Math.round((due - today) / 86400000);
-}
+const CHECK_ALARM = "kigen-check";
 
 async function updateBadge() {
   const { tasks = [] } = await chrome.storage.local.get("tasks");
@@ -43,7 +38,7 @@ async function notifyIfNeeded() {
     "tasks",
     "notified"
   ]);
-  const todayKey = new Date().toISOString().slice(0, 10);
+  const todayKey = localDateKey();
 
   for (const t of tasks) {
     if (t.done) continue;

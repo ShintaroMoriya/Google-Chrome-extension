@@ -153,14 +153,24 @@ $("#addTplBtn").addEventListener("click", () => {
 
 // ---------- ③ メモ（自動保存） ----------
 let memoTimer = null;
+function flushMemoSave() {
+  clearTimeout(memoTimer);
+  memoTimer = null;
+  store.set({ memo: $("#memoArea").value });
+  const st = $("#memoStatus");
+  st.textContent = "保存しました ✓";
+  setTimeout(() => (st.textContent = ""), 1500);
+}
 $("#memoArea").addEventListener("input", () => {
   clearTimeout(memoTimer);
-  memoTimer = setTimeout(() => {
-    store.set({ memo: $("#memoArea").value });
-    const st = $("#memoStatus");
-    st.textContent = "保存しました ✓";
-    setTimeout(() => (st.textContent = ""), 1500);
-  }, 400);
+  memoTimer = setTimeout(flushMemoSave, 400);
+});
+// サイドパネルが閉じる／隠れる瞬間に、保留中の保存を即座に確定する。
+// デバウンス待ち（400ms）の間に閉じると入力が失われるため。
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden" && memoTimer) {
+    flushMemoSave();
+  }
 });
 
 // ---------- ④ TODO ----------
@@ -206,8 +216,10 @@ $("#clearDoneBtn").addEventListener("click", () => {
 
 // ---------- 起動時ロード ----------
 store.get(["links", "templates", "memo", "todos"], (data) => {
-  links = data.links?.length ? data.links : DEFAULT_LINKS.slice();
-  templates = data.templates?.length ? data.templates : DEFAULT_TEMPLATES.slice();
+  // 「未保存（undefined）」の場合だけ初期セットを使う。ユーザーが全削除した
+  // 結果（空配列）まで初期セットへ戻してしまわないようにする。
+  links = data.links === undefined ? DEFAULT_LINKS.slice() : data.links;
+  templates = data.templates === undefined ? DEFAULT_TEMPLATES.slice() : data.templates;
   todos = data.todos || [];
   $("#memoArea").value = data.memo || "";
   renderLinks();
