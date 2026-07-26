@@ -228,6 +228,12 @@ input:focus, textarea:focus { outline: 2px solid var(--accent); border-color: tr
   width: 100%;
 }
 .btn-ghost:hover { color: var(--accent); border-color: var(--accent); }
+.btn-ghost.danger-armed {
+  background: #d93025;
+  border-color: #d93025;
+  border-style: solid;
+  color: #fff;
+}
 
 .add-box { margin-top: 14px; }
 .add-box summary {
@@ -238,3 +244,4 @@ input:focus, textarea:focus { outline: 2px solid var(--accent); border-color: tr
   padding: 4px 0;
 }
 .add-form { display: grid; gap: 8px; margin-top: 8px; }
+.input-status { min-height: 14px; margin: 4px 0 0; font-size: 11px; color: #b3261e; }

@@ -1,7 +1,6 @@
 /* キーワード・ハイライター - 設定ポップアップ */
 
 const $ = (sel) => document.querySelector(sel);
-const store = chrome.storage.local;
 
 const DEFAULT_KEYWORDS = [
   { word: "至急", color: "#FFB3B3" },
@@ -11,11 +10,24 @@ const DEFAULT_KEYWORDS = [
 ];
 
 let keywords = [];
+let enabled = true;
+let statusTimer = null;
 
 function escapeHtml(s) {
   return s.replace(/[&<>"']/g, (c) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
   }[c]));
+}
+
+function showStatus(message) {
+  clearTimeout(statusTimer);
+  const el = $("#inputStatus");
+  el.textContent = message;
+  statusTimer = setTimeout(() => { el.textContent = ""; }, 2200);
+}
+
+function persist() {
+  KHStore.save({ schemaVersion: KHStore.SCHEMA_VERSION, keywords, enabled });
 }
 
 function render() {
@@ -36,7 +48,7 @@ function render() {
   list.querySelectorAll(".kw-del").forEach((btn) => {
     btn.addEventListener("click", () => {
       keywords.splice(Number(btn.dataset.i), 1);
-      store.set({ keywords });
+      persist();
       render();
     });
   });
@@ -45,10 +57,16 @@ function render() {
 $("#addBtn").addEventListener("click", () => {
   const word = $("#newWord").value.trim();
   const color = $("#newColor").value;
-  if (!word) return;
-  if (keywords.some((k) => k.word === word)) return;
+  if (!word) {
+    showStatus("キーワードを入力してください");
+    return;
+  }
+  if (keywords.some((k) => k.word === word)) {
+    showStatus(`「${word}」はすでに登録済みです`);
+    return;
+  }
   keywords.push({ word, color });
-  store.set({ keywords });
+  persist();
   $("#newWord").value = "";
   render();
 });
@@ -58,16 +76,21 @@ $("#newWord").addEventListener("keydown", (e) => {
 });
 
 $("#enabledToggle").addEventListener("change", (e) => {
-  store.set({ enabled: e.target.checked });
+  enabled = e.target.checked;
+  persist();
 });
 
-store.get(["keywords", "enabled"], (data) => {
-  if (data.keywords === undefined) {
+KHStore.load().then(({ state, isNew }) => {
+  // 初期セットを適用するのは「保存データが一切無い初回インストール時」だけ。
+  // ユーザーが全キーワードを削除した状態（keywords: []）とは区別する。
+  if (isNew) {
     keywords = DEFAULT_KEYWORDS.slice();
-    store.set({ keywords });
+    enabled = true;
+    persist();
   } else {
-    keywords = data.keywords;
+    keywords = state.keywords;
+    enabled = state.enabled;
   }
-  $("#enabledToggle").checked = data.enabled !== false;
+  $("#enabledToggle").checked = enabled;
   render();
 });

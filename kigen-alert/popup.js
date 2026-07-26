@@ -1,14 +1,25 @@
 /* 期限みえるくん - ポップアップ */
 
 const $ = (sel) => document.querySelector(sel);
-const store = chrome.storage.local;
 const { daysUntil, localDateKey } = KigenDate;
 let tasks = [];
+let statusTimer = null;
 
 function escapeHtml(s) {
   return s.replace(/[&<>"']/g, (c) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
   }[c]));
+}
+
+function showStatus(message) {
+  clearTimeout(statusTimer);
+  const el = $("#inputStatus");
+  el.textContent = message;
+  statusTimer = setTimeout(() => { el.textContent = ""; }, 2200);
+}
+
+function persist() {
+  KAStore.save({ schemaVersion: KAStore.SCHEMA_VERSION, tasks });
 }
 
 function levelOf(task) {
@@ -62,7 +73,7 @@ function render() {
     cb.addEventListener("change", () => {
       const t = tasks.find((t) => t.id === cb.dataset.id);
       if (t) t.done = cb.checked;
-      store.set({ tasks });
+      persist();
       render();
     });
   });
@@ -70,7 +81,7 @@ function render() {
   list.querySelectorAll(".t-del").forEach((btn) => {
     btn.addEventListener("click", () => {
       tasks = tasks.filter((t) => t.id !== btn.dataset.id);
-      store.set({ tasks });
+      persist();
       render();
     });
   });
@@ -79,14 +90,21 @@ function render() {
 $("#addBtn").addEventListener("click", () => {
   const title = $("#taskTitle").value.trim();
   const due = $("#taskDue").value;
-  if (!title || !due) return;
+  if (!title) {
+    showStatus("タイトルを入力してください");
+    return;
+  }
+  if (!due) {
+    showStatus("期限日を選択してください");
+    return;
+  }
   tasks.push({
     id: String(Date.now()),
     title,
     due,
     done: false
   });
-  store.set({ tasks });
+  persist();
   $("#taskTitle").value = "";
   render();
 });
@@ -95,16 +113,38 @@ $("#taskTitle").addEventListener("keydown", (e) => {
   if (e.key === "Enter") $("#addBtn").click();
 });
 
-$("#clearDoneBtn").addEventListener("click", () => {
+// 破壊的操作は2度押し（1回目で赤く変化し「もう一度押すと片付ける」に変わる。
+// 3秒操作が無ければ自動的に元へ戻る）。
+let clearArmed = false;
+let clearArmedTimer = null;
+const clearBtn = $("#clearDoneBtn");
+const CLEAR_BTN_DEFAULT_TEXT = clearBtn.textContent;
+
+clearBtn.addEventListener("click", () => {
+  if (!clearArmed) {
+    clearArmed = true;
+    clearBtn.classList.add("danger-armed");
+    clearBtn.textContent = "もう一度押すと片付けます";
+    clearArmedTimer = setTimeout(() => {
+      clearArmed = false;
+      clearBtn.classList.remove("danger-armed");
+      clearBtn.textContent = CLEAR_BTN_DEFAULT_TEXT;
+    }, 3000);
+    return;
+  }
+  clearTimeout(clearArmedTimer);
+  clearArmed = false;
+  clearBtn.classList.remove("danger-armed");
+  clearBtn.textContent = CLEAR_BTN_DEFAULT_TEXT;
   tasks = tasks.filter((t) => !t.done);
-  store.set({ tasks });
+  persist();
   render();
 });
 
 // 初期表示：日付欄は今日をデフォルトに
 $("#taskDue").value = localDateKey();
 
-store.get("tasks", (data) => {
-  tasks = data.tasks || [];
+KAStore.load().then(({ state }) => {
+  tasks = state.tasks;
   render();
 });
