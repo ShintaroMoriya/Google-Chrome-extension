@@ -1,14 +1,14 @@
 /* 期限みえるくん - バックグラウンド
    30分ごとに期限をチェックして、バッジの色・数字・通知を更新します。 */
 
-importScripts('date.js');
+importScripts('date.js', 'store.js');
 const { daysUntil, localDateKey } = KigenDate;
 
 const CHECK_ALARM = "kigen-check";
 
 async function updateBadge() {
-  const { tasks = [] } = await chrome.storage.local.get("tasks");
-  const open = tasks.filter((t) => !t.done);
+  const { state } = await KAStore.load();
+  const open = state.tasks.filter((t) => !t.done);
 
   const overdueOrToday = open.filter((t) => daysUntil(t.due) <= 0);
   const soon = open.filter((t) => {
@@ -34,13 +34,11 @@ async function updateBadge() {
 }
 
 async function notifyIfNeeded() {
-  const { tasks = [], notified = {} } = await chrome.storage.local.get([
-    "tasks",
-    "notified"
-  ]);
+  const { state } = await KAStore.load();
+  const { notified = {} } = await chrome.storage.local.get(["notified"]);
   const todayKey = localDateKey();
 
-  for (const t of tasks) {
+  for (const t of state.tasks) {
     if (t.done) continue;
     const d = daysUntil(t.due);
     // 当日と前日に1回ずつ通知（同日中の重複通知は防ぐ）
@@ -84,5 +82,5 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 
 // ポップアップでタスクが変わったら即反映
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === "local" && changes.tasks) updateBadge();
+  if (area === "local" && changes[KAStore.STORAGE_KEY]) updateBadge();
 });

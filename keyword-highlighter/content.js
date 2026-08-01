@@ -124,9 +124,9 @@
 
   // ---------- 設定の読み込みと反映 ----------
   function loadAndRun() {
-    chrome.storage.local.get(["keywords", "enabled"], (data) => {
-      keywords = (data.keywords || []).filter((k) => k.word);
-      enabled = data.enabled !== false;
+    KHStore.load().then(({ state }) => {
+      keywords = state.keywords;
+      enabled = state.enabled;
       clearHighlights();
       if (enabled) highlight(document.body);
     });
@@ -134,7 +134,7 @@
 
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== "local") return;
-    if (changes.keywords || changes.enabled) loadAndRun();
+    if (changes[KHStore.STORAGE_KEY]) loadAndRun();
   });
 
   // ---------- 起動 ----------

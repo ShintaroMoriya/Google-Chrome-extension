@@ -117,3 +117,4 @@ input[type="color"] {
 }
 .kw-del:hover { color: var(--accent); }
 .empty { padding: 0 14px 14px; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.input-status { min-height: 16px; padding: 0 14px; margin: -2px 0 6px; font-size: 12px; color: #b3261e; }

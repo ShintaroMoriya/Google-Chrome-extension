@@ -34,6 +34,7 @@
         <input type="url" id="newLinkUrl" placeholder="URL（https://〜）" />
         <button class="btn-primary" id="addLinkBtn">追加</button>
       </div>
+      <p class="input-status" id="linkStatus"></p>
     </details>
   </section>
 
@@ -53,6 +54,7 @@
         <textarea id="newTplBody" rows="5" placeholder="本文。{会社名} {名前} が使えます。"></textarea>
         <button class="btn-primary" id="addTplBtn">追加</button>
       </div>
+      <p class="input-status" id="tplStatus"></p>
     </details>
   </section>
 
@@ -70,10 +72,12 @@
       <input type="text" id="newTodoText" placeholder="例：A社へ見積送付" />
       <button class="btn-primary" id="addTodoBtn">追加</button>
     </div>
+    <p class="input-status" id="todoStatus"></p>
     <ul class="todo-list" id="todoList"></ul>
     <button class="btn-ghost" id="clearDoneBtn">完了したものを片付ける</button>
   </section>
 
+  <script src="store.js"></script>
   <script src="sidepanel.js"></script>
 </body>
 </html>

@@ -27,12 +27,23 @@ const DEFAULT_TEMPLATES = [
 
 // ---------- ユーティリティ ----------
 const $ = (sel) => document.querySelector(sel);
-const store = chrome.storage.local;
 
 function escapeHtml(s) {
   return s.replace(/[&<>"']/g, (c) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
   }[c]));
+}
+
+function persist() {
+  SDStore.save({ links, templates, memo: $("#memoArea").value, todos });
+}
+
+let statusTimer = null;
+function showStatus(elSelector, message) {
+  clearTimeout(statusTimer);
+  const el = $(elSelector);
+  el.textContent = message;
+  statusTimer = setTimeout(() => { el.textContent = ""; }, 2200);
 }
 
 // ---------- 日付表示 ----------
@@ -67,7 +78,7 @@ function renderLinks() {
     card.addEventListener("click", (e) => {
       if (e.target.classList.contains("del")) {
         links.splice(Number(e.target.dataset.i), 1);
-        store.set({ links });
+        persist();
         renderLinks();
         return;
       }
@@ -80,9 +91,16 @@ function renderLinks() {
 $("#addLinkBtn").addEventListener("click", () => {
   const name = $("#newLinkName").value.trim();
   const url = $("#newLinkUrl").value.trim();
-  if (!name || !url) return;
+  if (!name) {
+    showStatus("#linkStatus", "表示名を入力してください");
+    return;
+  }
+  if (!url) {
+    showStatus("#linkStatus", "URLを入力してください");
+    return;
+  }
   links.push({ name, url, emoji: "🔗" });
-  store.set({ links });
+  persist();
   $("#newLinkName").value = "";
   $("#newLinkUrl").value = "";
   renderLinks();
@@ -121,20 +139,41 @@ function renderTemplates() {
   list.querySelectorAll(".btn-copy").forEach((btn) => {
     btn.addEventListener("click", async () => {
       const tpl = templates[Number(btn.dataset.i)];
-      await navigator.clipboard.writeText(applyVars(tpl.body));
-      btn.textContent = "コピー済み✓";
-      btn.classList.add("copied");
-      setTimeout(() => {
-        btn.textContent = "コピー";
-        btn.classList.remove("copied");
-      }, 1500);
+      const text = applyVars(tpl.body);
+      let ok = true;
+      try {
+        await navigator.clipboard.writeText(text);
+      } catch (_) {
+        // クリップボードAPIが使えない/拒否された場合のフォールバック。
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.style.cssText = "position:fixed; left:-9999px; top:0; opacity:0;";
+        document.body.appendChild(ta);
+        ta.select();
+        try {
+          ok = document.execCommand("copy");
+        } catch (_) {
+          ok = false;
+        }
+        ta.remove();
+      }
+      if (ok) {
+        btn.textContent = "コピー済み✓";
+        btn.classList.add("copied");
+        setTimeout(() => {
+          btn.textContent = "コピー";
+          btn.classList.remove("copied");
+        }, 1500);
+      } else {
+        showStatus("#tplStatus", "コピーに失敗しました。手動で選択してコピーしてください");
+      }
     });
   });
 
   list.querySelectorAll(".btn-del").forEach((btn) => {
     btn.addEventListener("click", () => {
       templates.splice(Number(btn.dataset.i), 1);
-      store.set({ templates });
+      persist();
       renderTemplates();
     });
   });
@@ -143,9 +182,16 @@ function renderTemplates() {
 $("#addTplBtn").addEventListener("click", () => {
   const title = $("#newTplTitle").value.trim();
   const body = $("#newTplBody").value.trim();
-  if (!title || !body) return;
+  if (!title) {
+    showStatus("#tplStatus", "テンプレ名を入力してください");
+    return;
+  }
+  if (!body) {
+    showStatus("#tplStatus", "本文を入力してください");
+    return;
+  }
   templates.push({ title, body });
-  store.set({ templates });
+  persist();
   $("#newTplTitle").value = "";
   $("#newTplBody").value = "";
   renderTemplates();
@@ -156,7 +202,7 @@ let memoTimer = null;
 function flushMemoSave() {
   clearTimeout(memoTimer);
   memoTimer = null;
-  store.set({ memo: $("#memoArea").value });
+  persist();
   const st = $("#memoStatus");
   st.textContent = "保存しました ✓";
   setTimeout(() => (st.textContent = ""), 1500);
@@ -190,7 +236,7 @@ function renderTodos() {
   list.querySelectorAll("input[type=checkbox]").forEach((cb) => {
     cb.addEventListener("change", () => {
       todos[Number(cb.dataset.i)].done = cb.checked;
-      store.set({ todos });
+      persist();
       renderTodos();
     });
   });
@@ -198,9 +244,12 @@ function renderTodos() {
 
 function addTodo() {
   const text = $("#newTodoText").value.trim();
-  if (!text) return;
+  if (!text) {
+    showStatus("#todoStatus", "内容を入力してください");
+    return;
+  }
   todos.push({ text, done: false });
-  store.set({ todos });
+  persist();
   $("#newTodoText").value = "";
   renderTodos();
 }
@@ -208,14 +257,37 @@ $("#addTodoBtn").addEventListener("click", addTodo);
 $("#newTodoText").addEventListener("keydown", (e) => {
   if (e.key === "Enter") addTodo();
 });
-$("#clearDoneBtn").addEventListener("click", () => {
+
+// 破壊的操作は2度押し（1回目で赤く変化し「もう一度押すと片付ける」に変わる。
+// 3秒操作が無ければ自動的に元へ戻る）。
+let clearArmed = false;
+let clearArmedTimer = null;
+const clearDoneBtn = $("#clearDoneBtn");
+const CLEAR_DONE_DEFAULT_TEXT = clearDoneBtn.textContent;
+
+clearDoneBtn.addEventListener("click", () => {
+  if (!clearArmed) {
+    clearArmed = true;
+    clearDoneBtn.classList.add("danger-armed");
+    clearDoneBtn.textContent = "もう一度押すと片付けます";
+    clearArmedTimer = setTimeout(() => {
+      clearArmed = false;
+      clearDoneBtn.classList.remove("danger-armed");
+      clearDoneBtn.textContent = CLEAR_DONE_DEFAULT_TEXT;
+    }, 3000);
+    return;
+  }
+  clearTimeout(clearArmedTimer);
+  clearArmed = false;
+  clearDoneBtn.classList.remove("danger-armed");
+  clearDoneBtn.textContent = CLEAR_DONE_DEFAULT_TEXT;
   todos = todos.filter((t) => !t.done);
-  store.set({ todos });
+  persist();
   renderTodos();
 });
 
 // ---------- 起動時ロード ----------
-store.get(["links", "templates", "memo", "todos"], (data) => {
+SDStore.load().then((data) => {
   // 「未保存（undefined）」の場合だけ初期セットを使う。ユーザーが全削除した
   // 結果（空配列）まで初期セットへ戻してしまわないようにする。
   links = data.links === undefined ? DEFAULT_LINKS.slice() : data.links;

@@ -129,6 +129,8 @@ input:focus { outline: 2px solid var(--accent); border-color: transparent; }
   font-size: 12px;
 }
 
+.input-status { min-height: 16px; padding: 0 14px; margin: -2px 0 6px; font-size: 12px; color: #b3261e; }
+
 .foot { padding: 4px 14px 14px; }
 .btn-ghost {
   background: none;
@@ -141,3 +143,9 @@ input:focus { outline: 2px solid var(--accent); border-color: transparent; }
   cursor: pointer;
 }
 .btn-ghost:hover { color: var(--accent); border-color: var(--accent); }
+.btn-ghost.danger-armed {
+  background: #d93025;
+  border-color: #d93025;
+  border-style: solid;
+  color: #fff;
+}
