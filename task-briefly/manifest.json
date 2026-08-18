@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "仕事ほどき - 依頼文をタスク化",
+  "version": "1.0.0",
+  "description": "長い依頼文を、担当者・期限・作業が分かる短い箇条書きに整理します。",
+  "permissions": ["activeTab", "scripting", "storage"],
+  "action": {
+    "default_title": "仕事ほどきを開く",
+    "default_popup": "popup.html"
+  }
+}
