@@ -1,0 +1,207 @@
+{
+  "extName": {
+    "message": "日程アシスト",
+    "description": "Extension name"
+  },
+  "extDescription": {
+    "message": "Googleカレンダーで候補日時を選び、相手のタイムゾーン・言語に合わせてコピー。日程調整を数クリックに。",
+    "description": "Store / extensions page description (max 132 chars)"
+  },
+  "actionTitle": {
+    "message": "日程アシスト（Alt+Shift+S）",
+    "description": "Toolbar tooltip"
+  },
+  "cmdCopy": {
+    "message": "選択中の文面をコピー",
+    "description": "Keyboard shortcut description"
+  },
+  "pickOn": {
+    "message": "カレンダーから取得中（Escで停止）"
+  },
+  "pickOff": {
+    "message": "カレンダーから取得する"
+  },
+  "close": {
+    "message": "閉じる"
+  },
+  "drag": {
+    "message": "ドラッグで移動"
+  },
+  "recipientTz": {
+    "message": "相手のタイムゾーン"
+  },
+  "recipientLocale": {
+    "message": "相手の言語・表記"
+  },
+  "sameAsMe": {
+    "message": "自分と同じ"
+  },
+  "recent": {
+    "message": "最近"
+  },
+  "searchTz": {
+    "message": "都市名・タイムゾーンで検索"
+  },
+  "noResults": {
+    "message": "見つかりません"
+  },
+  "back": {
+    "message": "戻る"
+  },
+  "slotEmpty": {
+    "message": "カレンダーの空き時間か予定をクリック"
+  },
+  "addManual": {
+    "message": "日時を入力"
+  },
+  "manualDate": {
+    "message": "日付"
+  },
+  "manualStart": {
+    "message": "開始"
+  },
+  "manualEnd": {
+    "message": "終了"
+  },
+  "add": {
+    "message": "追加"
+  },
+  "cancel": {
+    "message": "キャンセル"
+  },
+  "remove": {
+    "message": "削除"
+  },
+  "tpl_list": {
+    "message": "候補のみ"
+  },
+  "tpl_propose": {
+    "message": "候補日を送る（メール）"
+  },
+  "tpl_reschedule": {
+    "message": "再調整をお願いする（メール）"
+  },
+  "tpl_online": {
+    "message": "オンライン打合せを提案（メール）"
+  },
+  "copy": {
+    "message": "コピー"
+  },
+  "copied": {
+    "message": "コピーしました"
+  },
+  "copyFailed": {
+    "message": "コピーできませんでした。コピーボタンを押してください"
+  },
+  "clear": {
+    "message": "すべて消去"
+  },
+  "clearConfirm": {
+    "message": "もう一度押すと消去"
+  },
+  "settings": {
+    "message": "設定"
+  },
+  "done": {
+    "message": "完了"
+  },
+  "setSnap": {
+    "message": "刻み"
+  },
+  "setDuration": {
+    "message": "長さ"
+  },
+  "setChipMode": {
+    "message": "予定をクリックしたとき"
+  },
+  "chipWhole": {
+    "message": "予定全体"
+  },
+  "chipSlice": {
+    "message": "クリック位置から指定の長さ"
+  },
+  "setMyTz": {
+    "message": "自分のタイムゾーン"
+  },
+  "auto": {
+    "message": "自動"
+  },
+  "tzMismatch": {
+    "message": "Googleカレンダーは$value$で表示されています。「自分のタイムゾーン」を合わせてください",
+    "placeholders": {
+      "value": {
+        "content": "$1",
+        "example": "GMT+9"
+      }
+    }
+  },
+  "toastFull": {
+    "message": "候補は3件までです。先に1件削除してください"
+  },
+  "toastDuplicate": {
+    "message": "追加済みです"
+  },
+  "toastNeedSlots": {
+    "message": "先に候補を追加してください"
+  },
+  "err_excluded": {
+    "message": "タスクなどは候補にできません"
+  },
+  "err_allDay": {
+    "message": "終日の予定は候補にできません"
+  },
+  "err_noDate": {
+    "message": "日付を読み取れませんでした"
+  },
+  "err_noTime": {
+    "message": "時刻を読み取れませんでした"
+  },
+  "err_multiDay": {
+    "message": "日をまたぐ予定は候補にできません"
+  },
+  "err_noColumn": {
+    "message": "日付の列を特定できませんでした"
+  },
+  "err_allDayRow": {
+    "message": "終日の行ではなく時間帯を選んでください"
+  },
+  "err_noTimeAtPoint": {
+    "message": "この位置の時刻を算出できませんでした"
+  },
+  "err_crossesMidnight": {
+    "message": "日をまたぐため追加できません"
+  },
+  "err_invalidManual": {
+    "message": "日付と時刻を確認してください"
+  },
+  "err_endBeforeStart": {
+    "message": "終了は開始より後にしてください"
+  },
+  "warn_dateFromLabel": {
+    "message": "日付を予定の文字から推定しました"
+  },
+  "warn_timeFromPosition": {
+    "message": "時刻を画面上の位置から推定しました"
+  },
+  "warn_tzMismatch": {
+    "message": "カレンダーのタイムゾーンが異なる可能性があります"
+  },
+  "band_day": {
+    "message": "相手の業務時間内"
+  },
+  "band_edge": {
+    "message": "相手にとって早朝・夜"
+  },
+  "band_night": {
+    "message": "相手にとって深夜"
+  },
+  "dayNext": {
+    "message": "相手にとって翌日"
+  },
+  "dayPrev": {
+    "message": "相手にとって前日"
+  },
+  "theirTime": {
+    "message": "相手の時刻"
+  }
+}

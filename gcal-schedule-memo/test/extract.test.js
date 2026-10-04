@@ -72,6 +72,7 @@ function matchSelector(node, sel) {
 function fakeDoc(body, elementsAtPoint) {
   return {
     body,
+    querySelector: (sel) => body.querySelector(sel),
     elementsFromPoint: () => elementsAtPoint || []
   };
 }
@@ -294,3 +295,47 @@ module.exports = [
     }
   }
 ];
+
+const extractV2 = require('../src/extract.js');
+
+module.exports.push(
+  {
+    name: 'extractFromChip: ラベルがどの言語でも読めない場合はチップの位置から時刻を換算し medium',
+    fn: () => {
+      const PX = 48;
+      const label = el({ className: 'XuJrye', textContent: 'Réunion importante' });
+      const chip = el({ attrs: { 'data-eventid': 'abc' }, children: [label], rect: { top: 100 + 13.5 * PX, left: 0, width: 80, height: 1.5 * PX } });
+      const column = el({ attrs: { 'data-datekey': '28921' }, children: [chip], rect: { top: 100, left: 0, width: 100, height: 24 * PX } });
+      void column;
+      const result = extractV2.extractFromChip(chip);
+      assert.equal(result.sh, 13);
+      assert.equal(result.sm, 30);
+      assert.equal(result.eh, 15);
+      assert.equal(result.em, 0);
+      assert.equal(result.confidence, 'medium');
+      assert.equal(result.warning, extractV2.WARN.TIME_FROM_POSITION);
+    }
+  },
+  {
+    name: 'エラーは言語に依存しないコードで返す（文言は i18n 側）',
+    fn: () => {
+      const label = el({ className: 'XuJrye', textContent: '終日、休暇' });
+      const chip = el({ attrs: { 'data-eventid': 'abc' }, children: [label] });
+      assert.equal(extractV2.extractFromChip(chip).error, extractV2.ERR.ALL_DAY);
+      const task = el({ attrs: { 'data-eventid': 'tasks_1' } });
+      assert.equal(extractV2.extractFromChip(task).error, extractV2.ERR.EXCLUDED);
+      const doc = fakeDoc(el({}), []);
+      assert.equal(extractV2.extractFromSlot({ clientX: 0, clientY: 0, target: el({}) }, doc, {}).error, extractV2.ERR.NO_COLUMN);
+    }
+  },
+  {
+    name: 'parseHourLabel: 中国語・韓国語・独仏の時刻目盛りも読める',
+    fn: () => {
+      assert.equal(extractV2.parseHourLabel('上午10点'), 10);
+      assert.equal(extractV2.parseHourLabel('下午3点'), 15);
+      assert.equal(extractV2.parseHourLabel('오후 2시'), 14);
+      assert.equal(extractV2.parseHourLabel('14 Uhr'), 14);
+      assert.equal(extractV2.parseHourLabel('28'), null);
+    }
+  }
+);

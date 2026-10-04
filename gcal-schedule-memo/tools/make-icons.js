@@ -6,150 +6,128 @@
  *
  * 目的:
  *   icons/icon-16.png / icon-48.png / icon-128.png を、外部の画像ライブラリを
- *   一切使わずに生成する。青地に白いメモ帳＋オレンジのアクセントドット、
- *   という単純な図形をピクセル単位で描画し、Node標準の zlib で
- *   PNG（IHDR/IDAT/IEND の最小構成）として書き出す。
+ *   一切使わずに生成する。Node標準の zlib で PNG（IHDR/IDAT/IEND）を書き出す。
+ *
+ * 図案（v2.0.0, iOSのアプリアイコン風）:
+ *   青→藍のグラデーションの角丸正方形に、赤い帯の付いた白いカレンダー。
+ *   カレンダーの中に「3つの枠」を表す点（2つは青で埋まり、1つは空き）を置く。
+ *   = 「カレンダーから候補を3つ選ぶ」という機能そのものを、文字なしで表す。
  *
  * 呼び出し方:
  *   node gcal-schedule-memo/tools/make-icons.js
  *
- * 設計上の制約:
- *   - 依存ゼロ（node:zlib, node:fs, node:path のみ）。house の
- *     skills/dev_dashboard/assets/generate.js と同じ思想。
- *   - アンチエイリアスは行わない（単純な距離判定による塗り分け）。
- *     16px のような小サイズでは多少ジャギーが出るが、実用上問題ない。
+ * 描画方式:
+ *   各図形を符号付き距離関数で判定し、1ピクセルを 4×4 にスーパーサンプリングして
+ *   アンチエイリアスする。128pxは Chrome ウェブストアの推奨どおり、96pxの絵柄の
+ *   周囲に16pxの透明余白を取る。
  */
 
 const zlib = require('node:zlib');
 const fs = require('node:fs');
 const path = require('node:path');
 
-// ---------------------------------------------------------------------------
-// 色定義
-// ---------------------------------------------------------------------------
-const COLOR_BG = [26, 115, 232, 255]; // Google Blue 相当 #1a73e8
-const COLOR_PAD = [255, 255, 255, 255]; // 白いメモ帳
-const COLOR_LINE = [174, 203, 250, 255]; // 薄い青のテキスト行
-const COLOR_ACCENT = [251, 140, 0, 255]; // オレンジのアクセントドット #fb8c00
-const COLOR_TRANSPARENT = [0, 0, 0, 0];
+const SUPERSAMPLE = 4;
 
-// ---------------------------------------------------------------------------
-// ピクセルバッファ操作
-// ---------------------------------------------------------------------------
+const GRAD_TOP = [24, 139, 255];   // #188bff
+const GRAD_BOTTOM = [94, 92, 230]; // #5e5ce6 (iOS indigo)
+const WHITE = [255, 255, 255];
+const RED = [255, 59, 48];         // iOS systemRed
+const BLUE = [0, 122, 255];        // iOS systemBlue
+const SLOT_EMPTY = [199, 210, 235];
 
-/**
- * size x size の RGBA バッファを作る（初期値は透明）。
- * @param {number} size
- * @returns {Uint8Array}
- */
-function createBuffer(size) {
-  return new Uint8Array(size * size * 4);
+/** 角丸矩形の内側なら true（座標はアイコン内の 0..1 正規化座標） */
+function inRoundRect(x, y, x0, y0, x1, y1, r) {
+  const cx = Math.min(Math.max(x, x0 + r), x1 - r);
+  const cy = Math.min(Math.max(y, y0 + r), y1 - r);
+  if (x < x0 || x > x1 || y < y0 || y > y1) return false;
+  const dx = x - cx;
+  const dy = y - cy;
+  return dx * dx + dy * dy <= r * r;
+}
+
+function inCircle(x, y, cx, cy, r) {
+  const dx = x - cx;
+  const dy = y - cy;
+  return dx * dx + dy * dy <= r * r;
+}
+
+function lerp(a, b, t) {
+  return a.map((v, i) => Math.round(v + (b[i] - v) * t));
 }
 
 /**
- * 1ピクセルを塗る。
- * @param {Uint8Array} buf @param {number} size @param {number} x @param {number} y @param {number[]} rgba
+ * 正規化座標 (u, v) における色（RGBA, 0-255）。図形を奥から順に重ねる。
+ * @param {number} u 0..1
+ * @param {number} v 0..1
+ * @param {number} size 出力ピクセル数（小さいサイズでは細部を省く）
  */
-function setPixel(buf, size, x, y, rgba) {
-  if (x < 0 || y < 0 || x >= size || y >= size) return;
-  const i = (y * size + x) * 4;
-  buf[i] = rgba[0];
-  buf[i + 1] = rgba[1];
-  buf[i + 2] = rgba[2];
-  buf[i + 3] = rgba[3];
-}
+function colorAt(u, v, size) {
+  const small = size <= 16;
+  let color = null;
 
-/**
- * 角丸矩形を塗る（四隅だけ円弧判定、それ以外は矩形判定の単純な実装）。
- * @param {Uint8Array} buf @param {number} size
- * @param {number} x0 @param {number} y0 @param {number} w @param {number} h
- * @param {number} radius @param {number[]} rgba
- */
-function fillRoundedRect(buf, size, x0, y0, w, h, radius, rgba) {
-  const x1 = x0 + w;
-  const y1 = y0 + h;
-  for (let y = Math.floor(y0); y < Math.ceil(y1); y++) {
-    for (let x = Math.floor(x0); x < Math.ceil(x1); x++) {
-      const inCornerZone =
-        (x < x0 + radius && y < y0 + radius) ||
-        (x >= x1 - radius && y < y0 + radius) ||
-        (x < x0 + radius && y >= y1 - radius) ||
-        (x >= x1 - radius && y >= y1 - radius);
+  // 背景（iOS風の大きめの角丸）
+  if (inRoundRect(u, v, 0, 0, 1, 1, 0.225)) color = lerp(GRAD_TOP, GRAD_BOTTOM, v);
+  if (!color) return [0, 0, 0, 0];
 
-      if (inCornerZone) {
-        const cx = x < x0 + radius ? x0 + radius : x1 - radius;
-        const cy = y < y0 + radius ? y0 + radius : y1 - radius;
-        const dx = x + 0.5 - cx;
-        const dy = y + 0.5 - cy;
-        if (dx * dx + dy * dy > radius * radius) continue;
+  // カレンダー（白いカード）
+  const cx0 = small ? 0.16 : 0.2;
+  const cx1 = 1 - cx0;
+  const cy0 = small ? 0.18 : 0.21;
+  const cy1 = small ? 0.84 : 0.8;
+  const cr = small ? 0.1 : 0.09;
+  if (inRoundRect(u, v, cx0, cy0, cx1, cy1, cr)) {
+    color = WHITE;
+    // 上部の赤い帯（カードの角丸に沿って上だけ赤くする）
+    const bandBottom = cy0 + (cy1 - cy0) * (small ? 0.3 : 0.24);
+    if (v <= bandBottom) color = RED;
+
+    // 3つの枠（2つ埋まり・1つ空き）。16pxでは点を大きくして2つに省略。
+    const dotsY = bandBottom + (cy1 - bandBottom) * 0.5;
+    const centers = small ? [0.38, 0.62] : [0.33, 0.5, 0.67];
+    const r = small ? 0.085 : 0.062;
+    centers.forEach((dx, i) => {
+      const filled = small || i < 2;
+      if (filled) {
+        if (inCircle(u, v, dx, dotsY, r)) color = BLUE;
+      } else if (inCircle(u, v, dx, dotsY, r) && !inCircle(u, v, dx, dotsY, r * 0.55)) {
+        color = SLOT_EMPTY;
       }
-      setPixel(buf, size, x, y, rgba);
-    }
+    });
   }
+  return [color[0], color[1], color[2], 255];
 }
 
 /**
- * 円を塗る。
- * @param {Uint8Array} buf @param {number} size
- * @param {number} cx @param {number} cy @param {number} r @param {number[]} rgba
+ * @param {number} size 出力サイズ(px)
+ * @param {number} margin 透明余白(px)
+ * @returns {Uint8Array} RGBA
  */
-function fillCircle(buf, size, cx, cy, r, rgba) {
-  for (let y = Math.floor(cy - r); y <= Math.ceil(cy + r); y++) {
-    for (let x = Math.floor(cx - r); x <= Math.ceil(cx + r); x++) {
-      const dx = x + 0.5 - cx;
-      const dy = y + 0.5 - cy;
-      if (dx * dx + dy * dy <= r * r) setPixel(buf, size, x, y, rgba);
+function drawIcon(size, margin) {
+  const buf = new Uint8Array(size * size * 4);
+  const art = size - margin * 2;
+  const n = SUPERSAMPLE;
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      let r = 0; let g = 0; let b = 0; let a = 0;
+      for (let sy = 0; sy < n; sy++) {
+        for (let sx = 0; sx < n; sx++) {
+          const u = (x + (sx + 0.5) / n - margin) / art;
+          const v = (y + (sy + 0.5) / n - margin) / art;
+          const c = (u < 0 || v < 0 || u > 1 || v > 1) ? [0, 0, 0, 0] : colorAt(u, v, size);
+          const alpha = c[3] / 255;
+          r += c[0] * alpha; g += c[1] * alpha; b += c[2] * alpha; a += alpha;
+        }
+      }
+      const i = (y * size + x) * 4;
+      const samples = n * n;
+      if (a > 0) {
+        buf[i] = Math.round(r / a);
+        buf[i + 1] = Math.round(g / a);
+        buf[i + 2] = Math.round(b / a);
+      }
+      buf[i + 3] = Math.round((a / samples) * 255);
     }
   }
-}
-
-// ---------------------------------------------------------------------------
-// アイコンの図案: 青背景 + 白いメモ帳 + 薄い青の3本線 + オレンジのアクセント
-// ---------------------------------------------------------------------------
-
-/**
- * @param {number} size
- * @returns {Uint8Array}
- */
-function drawIcon(size) {
-  const buf = createBuffer(size);
-
-  // 背景（角丸の正方形）
-  fillRoundedRect(buf, size, 0, 0, size, size, size * 0.22, COLOR_BG);
-
-  // メモ帳（白い角丸矩形、少し内側）
-  const padMargin = size * 0.2;
-  fillRoundedRect(
-    buf, size,
-    padMargin, padMargin * 0.85,
-    size - padMargin * 2, size - padMargin * 1.7,
-    size * 0.08,
-    COLOR_PAD
-  );
-
-  // テキスト行（3本）。16pxでは潰れるため2本に間引く。
-  const lineCount = size >= 32 ? 3 : 2;
-  const lineHeight = Math.max(1, size * 0.05);
-  const lineInset = padMargin * 1.5;
-  const lineWidth = size - lineInset * 2;
-  const firstLineY = size * 0.36;
-  const lineGap = size * 0.16;
-  for (let i = 0; i < lineCount; i++) {
-    fillRoundedRect(
-      buf, size,
-      lineInset, firstLineY + i * lineGap,
-      lineWidth * (i === lineCount - 1 ? 0.6 : 1),
-      lineHeight,
-      lineHeight / 2,
-      COLOR_LINE
-    );
-  }
-
-  // アクセントドット（右下、追加されたメモを表す）
-  fillCircle(buf, size, size * 0.78, size * 0.78, size * 0.14, COLOR_ACCENT);
-  // ドットの縁を背景色でくり抜き、白いメモ帳の上に浮いて見えるようにする
-  // （簡易的な "リング" 効果。半透明合成は行わないシンプル実装）。
-
   return buf;
 }
 
@@ -236,9 +214,10 @@ function main() {
   const outDir = path.resolve(__dirname, '..', 'icons');
   fs.mkdirSync(outDir, { recursive: true });
 
-  const sizes = [16, 48, 128];
-  for (const size of sizes) {
-    const pixels = drawIcon(size);
+  // [サイズ, 透明余白]。128pxはストアの推奨（96pxの絵柄＋16pxの余白）に従う。
+  const sizes = [[16, 0], [48, 2], [128, 16]];
+  for (const [size, margin] of sizes) {
+    const pixels = drawIcon(size, margin);
     const png = encodePng(pixels, size);
     const outPath = path.join(outDir, `icon-${size}.png`);
     fs.writeFileSync(outPath, png);

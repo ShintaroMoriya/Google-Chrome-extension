@@ -1,121 +1,152 @@
-# 日程アシスト（Chrome拡張機能）
+# Schedule Assist / 日程アシスト (Chrome extension)
 
-Googleカレンダーを見ながら候補日時を**最大3件**集め、定型メールに自動で差し込んでコピーできるChrome拡張機能です。日程調整で繰り返し発生する「空き時間を探す → 日時を打つ → 文面を作る」という作業を、カレンダー上のクリックと1回のコピーに置き換えます。
+Pick up to **3 meeting times** on Google Calendar and copy them in **the other person's time zone, language and format** — in a few clicks.
 
-> この拡張機能は、Googleカレンダーのページ上で表示されている日時だけを扱います。予定の内容を外部サービスへ送信せず、候補日時とパネル位置はブラウザ内にのみ保存します。
+Googleカレンダーで候補日時を**最大3件**選び、**相手のタイムゾーン・言語・表記**に合わせてコピーできるChrome拡張機能です。日本語の説明は[後半](#日本語)にあります。
 
-## できること
+> Everything stays in your browser. Nothing about your calendar is sent anywhere. Permissions: `storage` and `https://calendar.google.com/*` only.
 
-| 機能 | 内容 |
+## What it does
+
+| | |
 | --- | --- |
-| カレンダーから候補を集める | Googleカレンダーの週表示・日表示で、空き枠または予定チップをクリックして候補日時を追加します。クリック前には取得対象の時間帯を枠で表示します。 |
-| 候補を手入力する | パネル内の日付・開始時刻・終了時刻を指定して候補を追加できます。カレンダーにない日時にも対応します。 |
-| 候補は3件に制限 | 一般的な日程調整メールに必要な3候補までに絞り、候補が多すぎる状態を防ぎます。 |
-| 定型メールを作る | 「候補日を送る」「再調整をお願いする」「オンライン打合せを提案」の3種類から選び、候補日時を自動で箇条書きにしてメール全文をコピーします。 |
-| 候補だけをコピー | 日時の一覧だけをコピーし、既存のメール本文へ自由に貼り付けられます。 |
+| **Pick from your calendar** | Hover a free time or an event in week/day view and you see exactly what will be added. Click to add it. Works whatever language Google Calendar is in. |
+| **Their time, their format** | Choose the other person's city (e.g. New York) and format (English 12h / English 24h / 日本語). The copied text uses their time zone, language and date style: `Mon, Aug 31 · 9:00 – 10:00 PM EDT`. |
+| **See their day at a glance** | Each time shows their local time with ☀ (working hours), 🌅 (early/late) or 🌙 (night), and a `+1` / `−1` badge if it falls on a different day for them. |
+| **One tap to copy** | Pick a style with an icon — times only, propose times, ask to reschedule, suggest a video call — then press Copy. |
+| **Fast** | `Alt+Shift+S` opens or closes the panel. `Alt+Shift+C` copies. Recent people are one tap away. You can change the shortcuts at `chrome://extensions/shortcuts`. |
+| **Safe by design** | Clicks on the calendar are only captured while the panel is open in pick mode. `Esc` steps back: it closes a sheet first, then stops picking. |
 
-## 使い方
+## How to use
 
-まずGoogleカレンダーを開き、ツールバーの拡張機能アイコンから**日程アシスト**をクリックします。右上にページ内パネルが表示され、同時に「取得モード」が有効になります。
+1. Open Google Calendar in week or day view, then click the toolbar icon (or press `Alt+Shift+S`).
+2. Click free times or events. The three slots fill up, and the dots below show how many are left.
+3. Tap the 🌐 chip to choose the other person's city. Tap the language chip to choose the format.
+4. Choose a message style with the icons, then press **Copy** and paste the text into Gmail, Outlook, Slack and so on.
 
-| 手順 | 操作 |
+Times that Google Calendar does not show can be added with **＋** on an empty slot.
+
+### What the shapes and colours mean
+
+| Visual | Meaning |
 | --- | --- |
-| 1 | Googleカレンダーを週表示または日表示で開き、拡張機能のアイコンをクリックします。 |
-| 2 | 空いている時間帯、または候補にしたい予定をクリックします。ホバー時に青・黄・赤の枠で表示された時間帯と同じ内容が追加されます。 |
-| 3 | カレンダーから選べない候補がある場合は、パネルの手入力欄で日付・開始時刻・終了時刻を入力して「追加」を押します。 |
-| 4 | 3候補を集めたら、定型文のボタンを押します。メール全文がクリップボードへコピーされます。 |
-| 5 | Gmail、Outlook、Slackなどの入力欄で貼り付けます。候補日時だけが必要な場合は「候補のみコピー」を使います。 |
+| Dashed slot | Still free. Click on the calendar to fill it. |
+| Slots shake | You already have 3 times, or that time is already added. |
+| Green ✓ on the Copy button | Copied. |
+| Blue / yellow / red frame while hovering | Time is certain / estimated from the position / needs checking. |
+| Grey dashed frame while hovering | The 3 slots are full. |
+| ⚠ next to a time | Estimated. Hover the icon to see why. |
 
-コピーされるメールの例は次のとおりです。
+## Install (developer mode)
 
-```text
-お世話になっております。
+1. Open `chrome://extensions` and turn on **Developer mode**.
+2. Click **Load unpacked** and select the `gcal-schedule-memo` folder.
+3. Pin **Schedule Assist** to the toolbar.
 
-お打ち合わせの候補日をお送りいたします。
+To build the zip for the Chrome Web Store:
 
-・9月1日(火) 10:30〜11:00
-・9月3日(木) 14:00〜15:00
-・9月4日(金) 16:00〜17:00
-
-上記でご都合はいかがでしょうか。
-ご都合が合わない場合は、恐れ入りますが別の候補をいくつかお知らせください。
-
-何卒よろしくお願いいたします。
+```bash
+cd gcal-schedule-memo
+zip -r ../schedule-assist-2.0.0.zip manifest.json background.js src icons _locales
 ```
 
-### 取得モードを終了する
+Listing text, the privacy policy and the checklist for the Featured badge are in [`store/`](./store).
 
-取得モードが有効な間だけ、カレンダー上のクリックは候補追加に使われます。普段どおりGoogleカレンダーを操作したいときは、パネル上部の**取得中**ボタンをもう一度押すか、`Esc`キーを押してください。パネルを閉じた場合も取得モードは必ず解除されます。
+## Tests
 
-## インストール
-
-Chromeウェブストアに公開せず、開発用の拡張機能として読み込む手順です。
-
-1. Chromeで `chrome://extensions` を開きます。
-2. 右上の**デベロッパーモード**をオンにします。
-3. **パッケージ化されていない拡張機能を読み込む**を選びます。
-4. このリポジトリの `gcal-schedule-memo` フォルダを選択します。
-5. 拡張機能一覧で「日程アシスト」をピン留めすると、Googleカレンダー上ですぐ呼び出せます。
-
-既に旧版を読み込んでいる場合は、`chrome://extensions` で該当拡張機能の**更新**ボタンを押してから、Googleカレンダーのタブを再読み込みしてください。
-
-## 対応範囲と注意事項
-
-| 対象 | 対応状況 | 補足 |
-| --- | --- | --- |
-| Googleカレンダーの週表示・日表示 | 対応 | 空き枠と時刻付き予定のクリックに対応します。 |
-| Googleカレンダーの月表示・スケジュール表示 | 一部対応 | 時刻付き予定の選択は可能ですが、空き枠は選択できません。 |
-| 終日予定・複数日にまたがる予定 | 対象外 | 誤った候補日時を作らないため、候補として追加しません。 |
-| Googleカレンダー外の日時 | 対応 | パネル内の手入力欄を利用してください。 |
-| Gmailへの自動送信 | 対象外 | 内容を確認してから、任意のメール本文へ貼り付ける方式です。 |
-
-Googleカレンダーはページ構造を変更することがあります。空き枠や予定をクリックしても正しく日時を読めない場合は、`tools/probe.js` を利用して実際のページ構造を確認し、`src/extract.js` の抽出条件を更新してください。調査結果には予定タイトルなどが含まれる可能性があるため、共有前に必ず内容を確認してください。
-
-## 動作確認
-
-依存関係なしで単体テストを実行できます。
+Unit tests need no dependencies:
 
 ```bash
 node gcal-schedule-memo/test/run.js
 ```
 
-画面操作を模したE2Eテストも実行できます。テスト用のChromium環境で、カレンダー上のクリック、手入力、候補3件の上限、クリップボードへの候補・定型メールコピーまでを確認します。
+The browser test loads the extension into Chromium against a calendar-like fixture. It covers picking, manual entry, the 3-slot limit, copying in New York time and Japanese, the copy shortcut, the time-zone mismatch warning and the absence of long tasks on a heavy page.
 
 ```bash
 cd gcal-schedule-memo/test/e2e
 npm install
-xvfb-run -a node picker.spec.js
+CHROMIUM_PATH=/path/to/chrome xvfb-run -a node picker.spec.js
+# Add SHOT_DIR=/some/dir to save panel screenshots (light and dark).
 ```
 
-実際のGoogleカレンダーでは、次の項目を一度確認してください。
+### Check on the real Google Calendar
 
-- [ ] 週表示で空き枠をクリックすると、プレビューと一致する候補が追加される。
-- [ ] 予定チップをクリックすると、正しい日時が追加される。
-- [ ] 手入力した日付・開始時刻・終了時刻が正しい日本語書式で表示される。
-- [ ] 3件追加後は4件目を追加できず、分かりやすい案内が表示される。
-- [ ] 定型文ボタンで、3候補が箇条書きに差し込まれたメール全文をコピーできる。
-- [ ] Gmail等に貼り付けても改行と波ダッシュ（`〜`）が崩れない。
-- [ ] `Esc`またはパネルを閉じた後、Googleカレンダーの通常操作が妨げられない。
-- [ ] タブ再読み込み後も候補が保持される。
+- [ ] Hovering a free time in week view shows the same time that is added on click.
+- [ ] Clicking an event adds the right date and time, also with Google Calendar set to English or another language.
+- [ ] With the other person set to New York, the copied text shows New York time with `EDT`/`EST`.
+- [ ] A 4th time cannot be added, and the slots shake.
+- [ ] `Alt+Shift+S` opens and closes the panel, and `Alt+Shift+C` copies.
+- [ ] If Google Calendar's time zone (top-left `GMT±hh`) differs from "My time zone", a warning appears in settings.
+- [ ] After `Esc` or closing the panel, Google Calendar works as usual.
+- [ ] Times, the other person and the chosen style survive a reload.
 
-## 技術構成
+## Technical notes
 
-この拡張機能はManifest V3と素のJavaScriptだけで構成され、ビルド工程や外部ライブラリを必要としません。候補日時は`chrome.storage.local`に保存し、メール本文はユーザーの操作でクリップボードへコピーします。権限は保存用の`storage`と、カレンダー画面で候補を選ぶための`https://calendar.google.com/*`だけに限定しています。
+Manifest V3 and plain JavaScript, with no build step and no libraries. Time zones are handled by the browser's own `Intl` (ICU), so daylight saving time is correct. Times are stored as calendar wall-clock values plus the time zone they were picked in.
 
-| ファイル | 役割 |
+| File | Role |
 | --- | --- |
-| `src/extract.js` | Googleカレンダーの予定チップ・空き枠から候補日時を抽出します。 |
-| `src/panel.js` | Shadow DOMで隔離したページ内パネルを表示します。 |
-| `src/store.js` | 最大3件の候補とパネル状態を安全に保存・移行します。 |
-| `src/templates.js` | 定型文と`{{候補日時}}`の差し込み処理を提供します。 |
-| `src/content.js` | 候補追加、手入力、コピー、カレンダー上の取得モードを結線します。 |
+| `src/extract.js` | Reads date and time from Google Calendar events and free slots. If the event text cannot be read in any language, it falls back to the event's position on the grid. |
+| `src/tz.js` | Converts between wall-clock time and instants, labels like `GMT-4`, city search, and day/early-late/night bands. |
+| `src/format.js` | One line per time, in `ja` / `en-US` / `en-GB`. Japanese output in the same time zone is byte-for-byte identical to v1. |
+| `src/templates.js` | Message templates in Japanese and English. |
+| `src/panel.js` / `src/icons.js` / `src/preview.js` | iOS-style panel in Shadow DOM, SF Symbols-style inline SVG icons, and the hover preview. |
+| `src/store.js` | Saved state (schema v3) with safe migration from v1/v2. |
+| `src/i18n.js` + `_locales/` | UI strings in English and Japanese. Adding a language only needs a new `messages.json`. |
+| `src/content.js` / `background.js` | Wiring, keyboard shortcuts and the toolbar icon. |
 
-## 変更履歴
+If Google Calendar changes its page structure, use `tools/probe.js` to inspect the live DOM and update `src/extract.js`.
+
+## Changelog
+
+### 2.0.0
+
+- Redesigned in an iPhone-like style. The UI uses icons, colour and motion instead of text, and shows 3 slots, date tiles and a green ✓ on copy.
+- Copies in the other person's time zone, language and format (English 12h, English 24h, Japanese), and shows their local time with ☀/🌅/🌙.
+- Added English UI and English message templates (`_locales`, English by default, Japanese automatically).
+- Added keyboard shortcuts (`Alt+Shift+S` opens or closes the panel, `Alt+Shift+C` copies) and a list of recent people.
+- Event times are read whatever language Google Calendar is in, with the event's position as a fallback.
+- Hover is faster: the time-label scan uses a TreeWalker and a cache.
+- Warns when Google Calendar's time zone and yours do not match.
+- New icon.
+
+### 1.2.0
+
+Fixed misreading of the hour labels. Added settings for snap, length and how event clicks are cut.
 
 ### 1.1.0
 
-候補日時を最大3件へ変更しました。手入力で候補を追加するフォームと、候補日時を差し込む3種類の定型メールコピー機能を追加しました。
+Limited the list to 3 times, and added manual entry and 3 Japanese email templates.
 
 ### 1.0.0
 
-Googleカレンダー上の予定チップ・空き枠から候補日時を収集し、一覧をコピーする機能を提供しました。
+First release.
+
+---
+
+## 日本語
+
+### できること
+
+| 機能 | 内容 |
+| --- | --- |
+| カレンダーから選ぶ | 週表示・日表示で空き時間や予定にカーソルを合わせると、追加される時間帯が枠で表示されます。クリックすると追加されます。Googleカレンダーの表示言語は問いません。 |
+| 相手の時刻・表記でコピー | 相手の都市（例: New York）と表記（English 12h / English 24h / 日本語）を選ぶと、相手の時刻・言語・書式でコピーされます。 |
+| 相手の1日がひと目で分かる | 各候補に相手の時刻を ☀（業務時間）・🌅（早朝/夜）・🌙（深夜）付きで表示します。相手にとって日付がずれる場合は `+1` / `−1` も表示します。 |
+| ワンタップでコピー | アイコンで文面（候補のみ / 候補日を送る / 再調整 / オンライン）を選び、コピーボタンを押します。 |
+| スピード | `Alt+Shift+S` でパネルを開閉し、`Alt+Shift+C` でコピーします。最近の相手はワンタップで呼び出せます。 |
+
+### 使い方
+
+1. Googleカレンダーを週表示または日表示で開き、ツールバーのアイコンをクリックします（または `Alt+Shift+S`）。
+2. 空き時間か予定をクリックします。3つの枠が埋まっていき、下の点で残りの数が分かります。
+3. 🌐のボタンで相手の都市を、言語のボタンで表記を選びます。
+4. アイコンで文面を選び、**コピー**を押して、メールやチャットに貼り付けます。
+
+カレンダーにない日時は、空き枠の **＋** から入力できます。`Esc` を押すと、シートを閉じてから取得モードを止めます。
+
+### 注意事項
+
+- 終日の予定と、日をまたぐ予定は候補にできません（誤った日時を作らないため）。
+- Googleカレンダーの表示タイムゾーン（左上の `GMT±hh`）と「自分のタイムゾーン」が違う場合は、設定に警告が出ます。設定で自分のタイムゾーンを合わせてください。
+- 予定の内容は外部へ送信しません。保存先はブラウザ内（`chrome.storage.local`）だけです。

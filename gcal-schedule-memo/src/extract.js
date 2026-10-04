@@ -18,6 +18,15 @@
  *       chipMode 'slice' : クリックした位置を含む durationMin 分だけを切り出す
  *     プレビューと確定値は resolveChipPreview 1箇所で計算し、ずれない。
  *
+ * v2.0.0 の変更点:
+ *   - エラー/警告は言語に依存しないコード（ERR / WARN）で返し、文言は i18n 側で引く。
+ *   - チップのラベルがどの言語でも読めない場合、チップ自身の矩形を所属列の
+ *     グリッド幾何（buildGridGeometry）で時刻に換算する（確度 medium）。
+ *     これで Google カレンダーの表示言語を問わず時刻を取得できる。
+ *   - 時刻目盛りの探索を TreeWalker（短いテキストノードだけ）に変え、結果を
+ *     キャッシュする（スクロール/リサイズ時は invalidateCaches() で破棄）。
+ *     以前は pointermove のたびに全要素の矩形を取得しており重かった。
+ *
  * どの層でも日時が確定できない場合は必ず {error} を返し、値を捏造しない。
  */
 'use strict';
@@ -57,7 +66,31 @@ const CONFIG = {
   DEFAULT_DURATION_MIN: 60,
   SNAP_MIN: 15,
   // 予定ブロッククリック時の既定モード: 'whole'（予定全体）| 'slice'（クリック位置のdurationMin分）
-  DEFAULT_CHIP_MODE: 'whole'
+  DEFAULT_CHIP_MODE: 'whole',
+  // ラベルが読めないチップを位置から換算するときの丸め単位（分）
+  CHIP_GEOMETRY_SNAP_MIN: 5,
+  // 時刻目盛りキャッシュの寿命（ms）。スクロール/リサイズでは即時破棄する。
+  HOUR_CACHE_TTL_MS: 500
+};
+
+// エラーコード（文言は _locales の err_* を引く）
+const ERR = {
+  EXCLUDED: 'excluded',
+  ALL_DAY: 'allDay',
+  NO_DATE: 'noDate',
+  NO_TIME: 'noTime',
+  MULTI_DAY: 'multiDay',
+  NO_COLUMN: 'noColumn',
+  ALL_DAY_ROW: 'allDayRow',
+  NO_TIME_AT_POINT: 'noTimeAtPoint',
+  CROSSES_MIDNIGHT: 'crossesMidnight'
+};
+
+// 警告コード（文言は _locales の warn_* を引く）
+const WARN = {
+  DATE_FROM_LABEL: 'dateFromLabel',
+  TIME_FROM_POSITION: 'timeFromPosition',
+  TZ_MISMATCH: 'tzMismatch'
 };
 
 /**
@@ -107,19 +140,42 @@ function isExcludedChip(chip) {
 }
 
 /**
+ * ラベルが読めないチップの時刻を、チップの矩形と所属列のグリッド幾何から求める。
+ * 列の高さが24時間分として妥当（column-span モデルが成立）な場合だけ使う。
+ * @param {Element} chip
+ * @param {?Element} columnEl data-datekey を持つ列要素
+ * @returns {{sh:number,sm:number,eh:number,em:number} | null}
+ */
+function timeFromChipGeometry(chip, columnEl) {
+  if (!chip || !columnEl || typeof chip.getBoundingClientRect !== 'function') return null;
+  const chipRect = chip.getBoundingClientRect();
+  const colRect = columnEl.getBoundingClientRect();
+  if (!(chipRect.height > 0)) return null;
+  const geometry = buildGridGeometry(colRect, []);
+  if (geometry.model !== 'column-span') return null;
+  const snap = CONFIG.CHIP_GEOMETRY_SNAP_MIN;
+  const startMin = snapMinutes(yToMinutes(chipRect.top, geometry), snap, 'nearest');
+  const endMin = snapMinutes(yToMinutes(chipRect.top + chipRect.height, geometry), snap, 'nearest');
+  const s = minutesToHm(startMin);
+  const e = minutesToHm(endMin);
+  if (!s || !e || endMin <= startMin) return null;
+  return { sh: s.h, sm: s.m, eh: e.h, em: e.m };
+}
+
+/**
  * 予定チップのクリックから日時エントリ（予定全体）を抽出する。
  * @param {Element} chip
  * @returns {object} Pick または {error: string}
  */
 function extractFromChip(chip) {
   if (isExcludedChip(chip)) {
-    return { error: 'タスクなど日程調整の対象外の項目です' };
+    return { error: ERR.EXCLUDED };
   }
 
   const labelText = getChipLabelText(chip);
 
   if (isAllDayLabel(labelText)) {
-    return { error: '終日の予定は対象外です' };
+    return { error: ERR.ALL_DAY };
   }
 
   // --- 日付レイヤ ---------------------------------------------------------
@@ -139,24 +195,32 @@ function extractFromChip(chip) {
   }
 
   if (!dateResult) {
-    return { error: '日付を読み取れませんでした' };
+    return { error: ERR.NO_DATE };
   }
 
   // --- 時刻レイヤ -----------------------------------------------------------
-  const timeResult = parseTimeRange(labelText);
+  let timeResult = parseTimeRange(labelText);
+  let timeSource = 'label';
+  if (!timeResult && datekeyHit) {
+    timeResult = timeFromChipGeometry(chip, datekeyHit.el);
+    timeSource = 'geometry';
+  }
   if (!timeResult) {
-    return { error: '時刻を読み取れませんでした（終日または複数日の予定の可能性があります）' };
+    return { error: ERR.NO_TIME };
   }
 
   if (
     timeResult.eh < timeResult.sh ||
     (timeResult.eh === timeResult.sh && timeResult.em <= timeResult.sm)
   ) {
-    return { error: '日をまたぐ予定は対象外です' };
+    return { error: ERR.MULTI_DAY };
   }
 
-  const confidence = dateSource === 'datekey' ? 'high' : 'medium';
-  const warning = dateSource === 'datekey' ? undefined : '日付をラベル文字列から推定しました';
+  const confident = dateSource === 'datekey' && timeSource === 'label';
+  const confidence = confident ? 'high' : 'medium';
+  let warning;
+  if (dateSource !== 'datekey') warning = WARN.DATE_FROM_LABEL;
+  else if (timeSource !== 'label') warning = WARN.TIME_FROM_POSITION;
 
   return {
     y: dateResult.y,
@@ -289,25 +353,69 @@ function parseHourLabel(text) {
     return h >= 0 && h <= 23 ? h : null;
   }
 
-  m = /^(\d{1,2})\s*(am|pm)$/i.exec(t);
+  m = /^(\d{1,2})\s*(am|pm|a\.\s?m\.|p\.\s?m\.)$/i.exec(t);
   if (m) {
     const h = Number(m[1]);
     if (h < 1 || h > 12) return null;
-    return m[2].toLowerCase() === 'pm' ? (h === 12 ? 12 : h + 12) : (h === 12 ? 0 : h);
+    return /^p/i.test(m[2]) ? (h === 12 ? 12 : h + 12) : (h === 12 ? 0 : h);
+  }
+
+  // 中国語・韓国語ロケール: "上午10点" "下午3點" "오전 10시"
+  m = /^(上午|下午|中午|오전|오후)\s*(\d{1,2})\s*(点|點|时|時|시)?$/.exec(t);
+  if (m) {
+    const h = Number(m[2]);
+    if (h < 0 || h > 12) return null;
+    const pm = m[1] === '下午' || m[1] === '오후' || m[1] === '中午';
+    return pm ? (h === 12 ? 12 : h + 12) : (h === 12 ? 0 : h);
+  }
+
+  // "10 Uhr" / "10 h"（独・仏）
+  m = /^(\d{1,2})\s*(uhr|h)$/i.exec(t);
+  if (m) {
+    const h = Number(m[1]);
+    return h >= 0 && h <= 23 ? h : null;
   }
 
   return null;
 }
 
+// 時刻目盛りの点列キャッシュ（同じ grid root・寿命内なら使い回す）
+let hourCache = null;
+
+/** スクロール・リサイズ・ビュー切替時に呼び、座標キャッシュを破棄する。 */
+function invalidateCaches() {
+  hourCache = null;
+}
+
+function nowMs() {
+  return (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+}
+
 /**
- * グリッドコンテナ内から時刻目盛りラベルらしき要素を集め、
- * hour-railモデル構築用の点列 [{hour, top}] に変換する。
- * @param {Element} gridRoot 探索範囲（広すぎるとノイズが増える）
- * @returns {Array<{hour:number, top:number}>}
+ * 時刻目盛りラベルらしい要素を集める（キャッシュなしの実体）。
+ * ブラウザでは TreeWalker で「短いテキストノード」だけを見るので、
+ * 全要素の矩形を取る旧実装より大幅に軽い。Nodeのテスト用スタブでは querySelectorAll を使う。
  */
-function collectHourLabelPoints(gridRoot) {
-  if (!gridRoot) return [];
+function scanHourLabelPoints(gridRoot) {
   const points = [];
+  const doc = gridRoot.ownerDocument;
+  const canWalk = doc && typeof doc.createTreeWalker === 'function' && typeof NodeFilter !== 'undefined';
+  if (canWalk) {
+    const walker = doc.createTreeWalker(gridRoot, NodeFilter.SHOW_TEXT);
+    let node = walker.nextNode();
+    while (node) {
+      const text = node.nodeValue;
+      if (text && text.length <= 12) {
+        const hour = parseHourLabel(text);
+        const parent = node.parentElement;
+        if (hour != null && parent && parent.children.length === 0) {
+          points.push({ hour, top: parent.getBoundingClientRect().top });
+        }
+      }
+      node = walker.nextNode();
+    }
+    return points;
+  }
   const candidates = gridRoot.querySelectorAll('*');
   for (const el of candidates) {
     // 子要素を持つ大きなコンテナはラベルではないので除外し、
@@ -319,6 +427,48 @@ function collectHourLabelPoints(gridRoot) {
     points.push({ hour, top: rect.top });
   }
   return points;
+}
+
+/**
+ * グリッドコンテナ内から時刻目盛りラベルらしき要素を集め、
+ * hour-railモデル構築用の点列 [{hour, top}] に変換する（短時間キャッシュ付き）。
+ * @param {Element} gridRoot 探索範囲（広すぎるとノイズが増える）
+ * @returns {Array<{hour:number, top:number}>}
+ */
+function collectHourLabelPoints(gridRoot) {
+  if (!gridRoot) return [];
+  const t = nowMs();
+  if (hourCache && hourCache.root === gridRoot && t - hourCache.at < CONFIG.HOUR_CACHE_TTL_MS) {
+    return hourCache.points;
+  }
+  const points = scanHourLabelPoints(gridRoot);
+  hourCache = { root: gridRoot, at: t, points };
+  return points;
+}
+
+/**
+ * Googleカレンダーが表示しているタイムゾーン（週/日表示の左上 "GMT+09" 等）を読む。
+ * 見つからなければ null。候補追加時だけ呼ぶ（pointermove では呼ばない）。
+ * @param {Document} doc
+ * @returns {number | null} UTCからのオフセット（分）
+ */
+function detectCalendarOffset(doc) {
+  if (!doc || !doc.body || typeof doc.createTreeWalker !== 'function' || typeof NodeFilter === 'undefined') return null;
+  const tzApi = (typeof module !== 'undefined') ? require('./tz.js') : globalThis.GSM.tz;
+  // 左上のラベルがメイン領域の外にある場合に備え、body 全体を見る（完全一致のみ採用）。
+  const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT);
+  let node = walker.nextNode();
+  let scanned = 0;
+  while (node && scanned < 20000) {
+    scanned += 1;
+    const text = node.nodeValue;
+    if (text && text.length <= 12 && /^\s*(GMT|UTC)/i.test(text)) {
+      const off = tzApi.parseGmtLabel(text);
+      if (off != null) return off;
+    }
+    node = walker.nextNode();
+  }
+  return null;
 }
 
 /**
@@ -344,35 +494,35 @@ function resolveSlotPreview(clickEvent, doc, options) {
 
   const columnHit = resolveDateColumn(clickEvent.target, clickEvent.clientX, clickEvent.clientY, doc);
   if (!columnHit) {
-    return { pick: { error: '日付列を特定できませんでした' }, rect: null };
+    return { pick: { error: ERR.NO_COLUMN }, rect: null };
   }
 
   const rect = columnHit.el.getBoundingClientRect();
   const gridRoot = doc
-    ? (doc.querySelector(CONFIG.GRID_ROOT_SELECTOR) || doc.body)
+    ? ((typeof doc.querySelector === 'function' && doc.querySelector(CONFIG.GRID_ROOT_SELECTOR)) || doc.body)
     : null;
   const hourPoints = collectHourLabelPoints(gridRoot);
   const geometry = buildGridGeometry(rect, hourPoints);
 
   if (looksLikeAllDayRow(rect, geometry.pxPerHour)) {
-    return { pick: { error: '終日の行では時刻を指定できません' }, rect: null };
+    return { pick: { error: ERR.ALL_DAY_ROW }, rect: null };
   }
 
   const rawMinutes = yToMinutes(clickEvent.clientY, geometry);
   const snapped = snapMinutes(rawMinutes, snapMin, 'floor');
   const start = minutesToHm(snapped);
   if (!start) {
-    return { pick: { error: 'クリック位置から時刻を算出できませんでした' }, rect: null };
+    return { pick: { error: ERR.NO_TIME_AT_POINT }, rect: null };
   }
 
   const endMinutes = snapped + durationMin;
   const end = minutesToHm(endMinutes);
   if (!end) {
-    return { pick: { error: '所要時間が日をまたぐため対象外です' }, rect: null };
+    return { pick: { error: ERR.CROSSES_MIDNIGHT }, rect: null };
   }
 
   const confidence = geometry.confidence;
-  const warning = confidence === 'high' ? undefined : '時刻を画面上の位置から推定しました';
+  const warning = confidence === 'high' ? undefined : WARN.TIME_FROM_POSITION;
 
   const pick = {
     y: columnHit.decoded.y,
@@ -413,6 +563,11 @@ function extractFromSlot(clickEvent, doc, options) {
 // ---------------------------------------------------------------------------
 const api = {
   CONFIG,
+  ERR,
+  WARN,
+  timeFromChipGeometry,
+  invalidateCaches,
+  detectCalendarOffset,
   findDatekeyAncestor,
   getChipLabelText,
   isExcludedChip,

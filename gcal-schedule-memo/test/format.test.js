@@ -86,3 +86,112 @@ module.exports = [
     }
   }
 ];
+
+const formatV2 = require('../src/format.js');
+const tokyo = (y, m, d, sh, sm, eh, em) => ({ y, m, d, sh, sm, eh, em, tz: 'Asia/Tokyo' });
+
+module.exports.push(
+  {
+    name: 'formatSlot(ja・同じタイムゾーン): v1の formatEntry と1バイトも違わない',
+    fn: () => {
+      const e = tokyo(2026, 9, 1, 10, 30, 11, 0);
+      assert.equal(formatV2.formatSlot(e, { locale: 'ja', targetTz: 'Asia/Tokyo' }), formatV2.formatEntry(e));
+      assert.equal(formatV2.formatSlot(e, { locale: 'ja', targetTz: 'Asia/Seoul' }), '9月1日(火) 10:30〜11:00');
+    }
+  },
+  {
+    name: 'formatSlot(en-US→ニューヨーク): 相手の日付・12時間表記・略称で出す',
+    fn: () => {
+      const e = tokyo(2026, 9, 1, 10, 0, 11, 0);
+      assert.equal(
+        formatV2.formatSlot(e, { locale: 'en-US', targetTz: 'America/New_York' }),
+        'Mon, Aug 31 · 9:00 – 10:00 PM EDT'
+      );
+    }
+  },
+  {
+    name: 'formatSlot(en-GB→ロンドン): 24時間表記・日付が先',
+    fn: () => {
+      const e = tokyo(2026, 9, 1, 17, 0, 18, 0);
+      assert.equal(
+        formatV2.formatSlot(e, { locale: 'en-GB', targetTz: 'Europe/London' }),
+        'Tue 1 Sept · 09:00–10:00 BST'
+      );
+    }
+  },
+  {
+    name: 'formatSlot(en-US・同じタイムゾーン): タイムゾーン表記を付けない',
+    fn: () => {
+      const e = tokyo(2026, 9, 1, 10, 0, 11, 0);
+      assert.equal(formatV2.formatSlot(e, { locale: 'en-US', targetTz: 'Asia/Tokyo' }), 'Tue, Sep 1 · 10:00 – 11:00 AM');
+    }
+  },
+  {
+    name: 'formatSlot(ja→ニューヨーク): 波ダッシュの書式のまま相手の時刻とGMT表記',
+    fn: () => {
+      const e = tokyo(2026, 9, 1, 10, 0, 11, 0);
+      assert.equal(formatV2.formatSlot(e, { locale: 'ja', targetTz: 'America/New_York' }), '8月31日(月) 21:00〜22:00 (GMT-4)');
+    }
+  },
+  {
+    name: 'formatSlot: 相手の時刻で日付をまたぐ場合は終了側に翌日を明示する',
+    fn: () => {
+      const e = tokyo(2026, 9, 1, 12, 30, 13, 30); // NY 23:30〜00:30
+      assert.equal(formatV2.formatSlot(e, { locale: 'ja', targetTz: 'America/New_York' }), '8月31日(月) 23:30〜翌00:30 (GMT-4)');
+      assert.equal(
+        formatV2.formatSlot(e, { locale: 'en-US', targetTz: 'America/New_York' }),
+        'Mon, Aug 31 · 11:30 PM – Tue 12:30 AM EDT'
+      );
+    }
+  },
+  {
+    name: 'computeSlot: 相手側の日付ずれ(dayShift)と時刻帯(band)',
+    fn: () => {
+      const c = formatV2.computeSlot(tokyo(2026, 9, 1, 10, 0, 11, 0), { targetTz: 'America/New_York' });
+      assert.equal(c.dayShift, -1);
+      assert.equal(c.band, 'edge');
+      assert.equal(c.differs, true);
+      const same = formatV2.computeSlot(tokyo(2026, 9, 1, 10, 0, 11, 0), { targetTz: 'Asia/Tokyo' });
+      assert.equal(same.dayShift, 0);
+      assert.equal(same.band, 'day');
+      assert.equal(same.differs, false);
+    }
+  },
+  {
+    name: 'computeSlot: tzを持たないv2以前のエントリは sourceTz（自分のタイムゾーン）で解釈する',
+    fn: () => {
+      const legacy = { y: 2026, m: 9, d: 1, sh: 10, sm: 0, eh: 11, em: 0 };
+      const c = formatV2.computeSlot(legacy, { sourceTz: 'Asia/Tokyo', targetTz: 'UTC' });
+      assert.equal(c.startMs, Date.UTC(2026, 8, 1, 1, 0));
+    }
+  },
+  {
+    name: 'formatAllFor: 実時刻の時系列順に並べる（タイムゾーンが混在しても正しい順）',
+    fn: () => {
+      const a = tokyo(2026, 9, 1, 10, 0, 11, 0); // UTC 01:00
+      const b = { y: 2026, m: 8, d: 31, sh: 20, sm: 0, eh: 21, em: 0, tz: 'America/New_York' }; // UTC 00:00
+      const text = formatV2.formatAllFor([a, b], { locale: 'en-US', targetTz: 'UTC' });
+      assert.equal(text, 'Tue, Sep 1 · 12:00 – 1:00 AM UTC\nTue, Sep 1 · 1:00 – 2:00 AM UTC');
+    }
+  },
+  {
+    name: 'normalizeLocale / langOf / formatSample: 書式の見本で選べる',
+    fn: () => {
+      assert.equal(formatV2.normalizeLocale('ja-JP'), 'ja');
+      assert.equal(formatV2.normalizeLocale('en_GB'), 'en-GB');
+      assert.equal(formatV2.normalizeLocale('fr-FR'), 'en-US');
+      assert.equal(formatV2.langOf('en-GB'), 'en');
+      assert.equal(formatV2.formatSample('en-US'), 'Mon, Aug 31 · 9:00 – 10:00 PM');
+      assert.equal(formatV2.formatSample('en-GB'), 'Mon 31 Aug · 21:00–22:00');
+      assert.equal(formatV2.formatSample('ja'), '8月31日(月) 21:00〜22:00');
+    }
+  },
+  {
+    name: 'formatDuration: 短い単位表記',
+    fn: () => {
+      assert.equal(formatV2.formatDuration(15, 'en'), '15m');
+      assert.equal(formatV2.formatDuration(60, 'en'), '1h');
+      assert.equal(formatV2.formatDuration(90, 'en'), '1.5h');
+    }
+  }
+);
