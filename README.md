@@ -34,3 +34,9 @@
 - 外部依存を避け、権限は最小限にします。
 
 コピペで使えるプロンプトは [`docs/new-extension-prompt.md`](./docs/new-extension-prompt.md) にあります。`claude-business-os` 側の [`assets/prompt_template.md`](https://github.com/ShintaroMoriya/claude-business-os/blob/main/skills/chrome_extension_ui/assets/prompt_template.md) も同じ趣旨のものです。
+
+### 使える外部API
+
+| API | 用途 | 組み込み手順 |
+| :--- | :--- | :--- |
+| [OpenPOI API](https://docs.openpoiapi.com) | 日本全国の施設（店舗・医療・教育など約337万件）をキーワード・位置で検索。無料・APIキー不要 | [`docs/openpoi-api.md`](./docs/openpoi-api.md) |
