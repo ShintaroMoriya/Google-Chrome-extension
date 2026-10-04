@@ -147,3 +147,52 @@ module.exports = [
     }
   }
 ];
+
+const storeV3 = require('../src/store.js');
+
+module.exports.push(
+  {
+    name: 'migrate(v2→v3): 候補とパネル位置を保持し、新しい設定は既定値で補完する',
+    fn: () => {
+      const v2 = {
+        schemaVersion: 2,
+        entries: [{ id: 'a', y: 2026, m: 7, d: 25, sh: 10, sm: 0, eh: 11, em: 0 }],
+        panel: { x: 10, y: 20, visible: true, pickMode: false },
+        settings: { durationMin: 30, snapMin: 30, chipMode: 'slice' }
+      };
+      const s = storeV3.migrate(v2);
+      assert.equal(s.schemaVersion, 3);
+      assert.equal(s.entries.length, 1);
+      assert.equal(s.entries[0].tz, undefined); // 表示時に自分のタイムゾーンとして解釈
+      assert.equal(s.panel.x, 10);
+      assert.equal(s.settings.durationMin, 30);
+      assert.equal(s.settings.chipMode, 'slice');
+      assert.deepEqual(s.settings.recipient, { tz: null, locale: null });
+      assert.equal(s.settings.templateId, 'schedule-request');
+      assert.deepEqual(s.settings.recentRecipients, []);
+    }
+  },
+  {
+    name: 'migrate: 壊れた entries / recipient は安全に捨てる',
+    fn: () => {
+      const s = storeV3.migrate({ schemaVersion: 3, entries: [null, 'x', { id: 'ok' }], settings: { recipient: 'bad', recentRecipients: 'bad' } });
+      assert.deepEqual(s.entries, [{ id: 'ok' }]);
+      assert.deepEqual(s.settings.recipient, { tz: null, locale: null });
+      assert.deepEqual(s.settings.recentRecipients, []);
+    }
+  },
+  {
+    name: 'setRecipient / pushRecentRecipient: 重複は先頭へ移動し最大5件',
+    fn: () => {
+      let s = storeV3.freshState();
+      s = storeV3.setRecipient(s, { tz: 'America/New_York' });
+      assert.deepEqual(s.settings.recipient, { tz: 'America/New_York', locale: null });
+      for (const tz of ['A/1', 'A/2', 'A/3', 'A/4', 'A/5', 'A/6']) s = storeV3.pushRecentRecipient(s, { tz, locale: 'en-US' });
+      assert.equal(s.settings.recentRecipients.length, storeV3.MAX_RECENT_RECIPIENTS);
+      assert.equal(s.settings.recentRecipients[0].tz, 'A/6');
+      s = storeV3.pushRecentRecipient(s, { tz: 'A/4', locale: 'en-US' });
+      assert.equal(s.settings.recentRecipients[0].tz, 'A/4');
+      assert.equal(s.settings.recentRecipients.filter((r) => r.tz === 'A/4').length, 1);
+    }
+  }
+);

@@ -24,7 +24,7 @@
 (function () {
 
 // 終日イベントの判定（日本語・英語の両表記に対応）。
-const RE_ALL_DAY = /(終日|all[\s-]?day)/i;
+const RE_ALL_DAY = /(終日|all[\s-]?day|全天|종일|ganztägig|toute la journée|todo el día|dia inteiro)/i;
 
 // 区切り文字の候補: 全角/半角ハイフン・ダッシュ類・波ダッシュ・全角チルダ・"から"・"to"。
 const RANGE_SEP = '(?:[-–—〜～]|から|to)';
@@ -125,7 +125,64 @@ function parseTimeRange(text) {
     return { sh: Number(h1), sm: Number(m1), eh: Number(h2), em: Number(m2) };
   }
 
+  return parseTimeRangeGeneric(text);
+}
+
+// ---------------------------------------------------------------------------
+// v2.0.0: 言語を問わない汎用パーサ（上の3パターンで読めない表記の救済）
+//   "10h00 à 11h00" / "10.00–11.00" / "10:00 bis 11:00" / "上午10:00至上午11:00" /
+//   "오전 10:00~오전 11:00" / "10 a.m. – 11 a.m." など。
+//   2つの時刻トークンが、数字を含まない短い区切り（8文字以内）で並んでいるものだけを採る。
+//   それでも読めない場合は extract.js がチップの位置（幾何）から時刻を求める。
+// ---------------------------------------------------------------------------
+const PRE_MARK = '(午前|午後|上午|下午|中午|오전|오후)?';
+const POST_MARK = '(a\\.?\\s?m\\.?|p\\.?\\s?m\\.?)?';
+const TIME_TOKEN = `${PRE_MARK}\\s*(\\d{1,2})(?:\\s*[:.h時时시]\\s*(\\d{2})?)?\\s*(?:分|분)?\\s*${POST_MARK}`;
+const RE_GENERIC_RANGE = new RegExp(`${TIME_TOKEN}\\s*([^\\d\\n]{1,8}?)\\s*${TIME_TOKEN}`, 'i');
+const PM_MARKS = ['午後', '下午', '오후'];
+const AM_MARKS = ['午前', '上午', '오전'];
+
+function markOf(pre, post) {
+  if (pre) {
+    if (PM_MARKS.includes(pre) || pre === '中午') return 'pm';
+    if (AM_MARKS.includes(pre)) return 'am';
+  }
+  if (post) return /^p/i.test(post) ? 'pm' : 'am';
   return null;
+}
+
+function applyMark(mark, hour) {
+  if (!mark) return hour;
+  if (mark === 'am') return hour === 12 ? 0 : hour;
+  return hour === 12 ? 12 : hour + 12;
+}
+
+/**
+ * 言語を問わない時刻レンジの抽出。読めなければ null（捏造しない）。
+ * @param {string} text
+ * @returns {{sh:number, sm:number, eh:number, em:number} | null}
+ */
+function parseTimeRangeGeneric(text) {
+  if (!text) return null;
+  const m = RE_GENERIC_RANGE.exec(text);
+  if (!m) return null;
+  const [, pre1, h1, m1, post1, sep, pre2, h2, m2, post2] = m;
+  // 区切りが「、」「,」だけなら別の情報（日付等）の連続とみなす。
+  if (/^[,、，]+$/.test(sep.trim())) return null;
+  const hasMinute1 = m1 != null;
+  const hasMinute2 = m2 != null;
+  let mark1 = markOf(pre1, post1);
+  let mark2 = markOf(pre2, post2);
+  // 時刻らしさ: 分か午前/午後の印のどちらかが両端に必要（"28 - 30" のような日付範囲を拾わない）。
+  if (!(hasMinute1 || mark1 || mark2) || !(hasMinute2 || mark2 || mark1)) return null;
+  if (!mark2) mark2 = mark1;
+  if (!mark1) mark1 = mark2;
+  const sh = applyMark(mark1, Number(h1));
+  const eh = applyMark(mark2, Number(h2));
+  const sm = hasMinute1 ? Number(m1) : 0;
+  const em = hasMinute2 ? Number(m2) : 0;
+  if (sh > 23 || eh > 24 || sm > 59 || em > 59) return null;
+  return { sh, sm, eh: eh === 24 ? 0 : eh, em };
 }
 
 /**
@@ -140,7 +197,7 @@ function isAllDayLabel(text) {
 // ---------------------------------------------------------------------------
 // エクスポート（ブラウザ: globalThis.GSM.timeparse / Node: module.exports）
 // ---------------------------------------------------------------------------
-const api = { parseTimeRange, isAllDayLabel, to24hJa, to24hEn };
+const api = { parseTimeRange, parseTimeRangeGeneric, isAllDayLabel, to24hJa, to24hEn };
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = api;
 } else {

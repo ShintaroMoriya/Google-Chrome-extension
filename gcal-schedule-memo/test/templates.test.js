@@ -50,3 +50,42 @@ module.exports = [
     }
   }
 ];
+
+const tokyoEntries = entries.map((e) => Object.assign({ tz: 'Asia/Tokyo' }, e));
+
+module.exports.push(
+  {
+    name: 'findTemplate: 言語ごとに同じIDのテンプレートを持つ',
+    fn() {
+      for (const id of templates.TEMPLATE_IDS.filter((x) => x !== 'list')) {
+        assert.ok(templates.findTemplate(id, 'ja'), `ja:${id}`);
+        assert.ok(templates.findTemplate(id, 'en'), `en:${id}`);
+        assert.ok(templates.findTemplate(id, 'en').body.includes('{{slots}}'));
+      }
+      assert.equal(templates.findTemplate('schedule-request', 'en').title, 'Propose times');
+    }
+  },
+  {
+    name: 'renderTemplate(en): 相手の書式の候補を • 箇条書きで差し込む',
+    fn() {
+      const all = (list) => format.formatAllFor(list, { locale: 'en-US', targetTz: 'America/New_York' });
+      const text = templates.renderTemplate(templates.findTemplate('schedule-request', 'en'), tokyoEntries, all, 'en');
+      assert.ok(text.startsWith('Hi,\n\nHere are a few times that work for me:\n\n'));
+      assert.ok(text.includes('• Mon, Aug 31 · 9:30 – 10:00 PM EDT\n• Thu, Sep 3 · 1:00 – 2:00 AM EDT'));
+      assert.ok(text.endsWith('Best regards,'));
+    }
+  },
+  {
+    name: 'renderTemplate(list): 候補のみは箇条書き記号なしの行だけ',
+    fn() {
+      const text = templates.renderTemplate(templates.findTemplate('list', 'ja'), entries, format.formatAll, 'ja');
+      assert.equal(text, '9月1日(火) 10:30〜11:00\n9月3日(木) 14:00〜15:00');
+    }
+  },
+  {
+    name: 'renderTemplate(en): 候補が無ければ英語の案内を差し込む',
+    fn() {
+      assert.equal(templates.renderTemplate({ body: '{{slots}}' }, [], format.formatAll, 'en'), '• (add your available times)');
+    }
+  }
+);

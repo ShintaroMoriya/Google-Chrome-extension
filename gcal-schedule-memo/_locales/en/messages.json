@@ -1,0 +1,207 @@
+{
+  "extName": {
+    "message": "Schedule Assist",
+    "description": "Extension name"
+  },
+  "extDescription": {
+    "message": "Pick meeting times on Google Calendar and copy them in the other person's time zone and language — in a few clicks.",
+    "description": "Store / extensions page description (max 132 chars)"
+  },
+  "actionTitle": {
+    "message": "Schedule Assist (Alt+Shift+S)",
+    "description": "Toolbar tooltip"
+  },
+  "cmdCopy": {
+    "message": "Copy the selected message",
+    "description": "Keyboard shortcut description"
+  },
+  "pickOn": {
+    "message": "Picking from the calendar (Esc to stop)"
+  },
+  "pickOff": {
+    "message": "Pick times from the calendar"
+  },
+  "close": {
+    "message": "Close"
+  },
+  "drag": {
+    "message": "Drag to move"
+  },
+  "recipientTz": {
+    "message": "Their time zone"
+  },
+  "recipientLocale": {
+    "message": "Their language and format"
+  },
+  "sameAsMe": {
+    "message": "Same as me"
+  },
+  "recent": {
+    "message": "Recent"
+  },
+  "searchTz": {
+    "message": "Search a city or time zone"
+  },
+  "noResults": {
+    "message": "No matches"
+  },
+  "back": {
+    "message": "Back"
+  },
+  "slotEmpty": {
+    "message": "Click a free time or an event on the calendar"
+  },
+  "addManual": {
+    "message": "Enter a time"
+  },
+  "manualDate": {
+    "message": "Date"
+  },
+  "manualStart": {
+    "message": "Start"
+  },
+  "manualEnd": {
+    "message": "End"
+  },
+  "add": {
+    "message": "Add"
+  },
+  "cancel": {
+    "message": "Cancel"
+  },
+  "remove": {
+    "message": "Remove"
+  },
+  "tpl_list": {
+    "message": "Times only"
+  },
+  "tpl_propose": {
+    "message": "Propose times (email)"
+  },
+  "tpl_reschedule": {
+    "message": "Ask to reschedule (email)"
+  },
+  "tpl_online": {
+    "message": "Suggest a video call (email)"
+  },
+  "copy": {
+    "message": "Copy"
+  },
+  "copied": {
+    "message": "Copied"
+  },
+  "copyFailed": {
+    "message": "Couldn't copy. Please click Copy."
+  },
+  "clear": {
+    "message": "Clear all"
+  },
+  "clearConfirm": {
+    "message": "Click again to clear"
+  },
+  "settings": {
+    "message": "Settings"
+  },
+  "done": {
+    "message": "Done"
+  },
+  "setSnap": {
+    "message": "Snap"
+  },
+  "setDuration": {
+    "message": "Length"
+  },
+  "setChipMode": {
+    "message": "Clicking an event"
+  },
+  "chipWhole": {
+    "message": "Use the whole event"
+  },
+  "chipSlice": {
+    "message": "Use the length from the click position"
+  },
+  "setMyTz": {
+    "message": "My time zone"
+  },
+  "auto": {
+    "message": "Automatic"
+  },
+  "tzMismatch": {
+    "message": "Google Calendar shows $value$. Check “My time zone” in settings.",
+    "placeholders": {
+      "value": {
+        "content": "$1",
+        "example": "GMT+9"
+      }
+    }
+  },
+  "toastFull": {
+    "message": "Up to 3 times. Remove one first."
+  },
+  "toastDuplicate": {
+    "message": "Already added"
+  },
+  "toastNeedSlots": {
+    "message": "Add a time first"
+  },
+  "err_excluded": {
+    "message": "Tasks and reminders can't be used"
+  },
+  "err_allDay": {
+    "message": "All-day events can't be used"
+  },
+  "err_noDate": {
+    "message": "Couldn't read the date"
+  },
+  "err_noTime": {
+    "message": "Couldn't read the time"
+  },
+  "err_multiDay": {
+    "message": "Events that span days can't be used"
+  },
+  "err_noColumn": {
+    "message": "Couldn't find the day"
+  },
+  "err_allDayRow": {
+    "message": "Pick a time below the all-day row"
+  },
+  "err_noTimeAtPoint": {
+    "message": "Couldn't work out the time here"
+  },
+  "err_crossesMidnight": {
+    "message": "This would run past midnight"
+  },
+  "err_invalidManual": {
+    "message": "Check the date and times"
+  },
+  "err_endBeforeStart": {
+    "message": "End must be after start"
+  },
+  "warn_dateFromLabel": {
+    "message": "Date estimated from the event text"
+  },
+  "warn_timeFromPosition": {
+    "message": "Time estimated from the position on screen"
+  },
+  "warn_tzMismatch": {
+    "message": "Your calendar may use a different time zone"
+  },
+  "band_day": {
+    "message": "Working hours for them"
+  },
+  "band_edge": {
+    "message": "Early or late for them"
+  },
+  "band_night": {
+    "message": "Night for them"
+  },
+  "dayNext": {
+    "message": "Next day for them"
+  },
+  "dayPrev": {
+    "message": "Previous day for them"
+  },
+  "theirTime": {
+    "message": "Their time"
+  }
+}

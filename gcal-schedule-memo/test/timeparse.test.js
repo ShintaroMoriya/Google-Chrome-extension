@@ -78,3 +78,34 @@ module.exports = [
     }
   }
 ];
+
+const timeparseV2 = require('../src/timeparse.js');
+
+module.exports.push(
+  {
+    name: 'parseTimeRange(汎用): 仏・独・伊・中・韓などの表記も読める',
+    fn: () => {
+      const want = { sh: 10, sm: 0, eh: 11, em: 0 };
+      for (const label of ['10h00 à 11h00, Réunion', '10:00 bis 11:00 Uhr', '10.00–11.00', '上午10:00至上午11:00', '오전 10:00~오전 11:00']) {
+        assert.deepEqual(timeparseV2.parseTimeRange(label), want, label);
+      }
+      assert.deepEqual(timeparseV2.parseTimeRange('下午3:00至下午4:30'), { sh: 15, sm: 0, eh: 16, em: 30 });
+      assert.deepEqual(timeparseV2.parseTimeRange('10 a.m. – 11:30 a.m.'), { sh: 10, sm: 0, eh: 11, em: 30 });
+    }
+  },
+  {
+    name: 'parseTimeRange(汎用): 時刻らしさが無い数字の並び（日付範囲など）は拾わない',
+    fn: () => {
+      assert.equal(timeparseV2.parseTimeRange('28 – 30 August'), null);
+      assert.equal(timeparseV2.parseTimeRange('Meeting, 2026, 12'), null);
+    }
+  },
+  {
+    name: 'isAllDayLabel: 他言語の「終日」も検出する',
+    fn: () => {
+      for (const label of ['全天', '종일', 'ganztägig', 'toute la journée', 'todo el día']) {
+        assert.equal(timeparseV2.isAllDayLabel(label), true, label);
+      }
+    }
+  }
+);

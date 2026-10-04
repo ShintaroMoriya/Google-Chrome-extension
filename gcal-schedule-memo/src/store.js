@@ -3,12 +3,20 @@
  *
  * 候補日時・ページ内パネルの状態を chrome.storage.local に保存する。
  * スキーマ変更時も、過去の候補を安全に引き継ぐ。
+ *
+ * v3（拡張機能 v2.0.0）:
+ *   - エントリに tz（追加した時点の自分のタイムゾーン）を持たせる。v2以前の
+ *     エントリは tz を持たず、表示時に「現在の自分のタイムゾーン」として解釈する。
+ *   - settings に 相手（recipient: tz / locale）・自分のタイムゾーン（myTz）・
+ *     選択中の定型文（templateId）・最近の相手（recentRecipients）・初回ガイド
+ *     表示済み（onboarded）を追加。null は「自動」を意味する。
  */
 'use strict';
 
 (function () {
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
+const MAX_RECENT_RECIPIENTS = 5;
 const STORAGE_KEY = 'gcalScheduleMemo.v1';
 const MAX_ENTRIES = 3;
 
@@ -17,8 +25,36 @@ function freshState() {
     schemaVersion: SCHEMA_VERSION,
     entries: [],
     panel: { x: null, y: null, visible: false, pickMode: false },
-    settings: { durationMin: 60, snapMin: 15 }
+    settings: defaultSettings()
   };
+}
+
+function defaultSettings() {
+  return {
+    durationMin: 60,
+    snapMin: 15,
+    chipMode: 'whole',
+    myTz: null,
+    recipient: { tz: null, locale: null },
+    templateId: 'schedule-request',
+    recentRecipients: [],
+    onboarded: false
+  };
+}
+
+function isPlainObject(v) {
+  return !!v && typeof v === 'object' && !Array.isArray(v);
+}
+
+function normalizeSettings(raw) {
+  const base = defaultSettings();
+  const src = isPlainObject(raw) ? raw : {};
+  const merged = Object.assign({}, base, src);
+  merged.recipient = Object.assign({}, base.recipient, isPlainObject(src.recipient) ? src.recipient : {});
+  merged.recentRecipients = Array.isArray(src.recentRecipients)
+    ? src.recentRecipients.filter(isPlainObject).slice(0, MAX_RECENT_RECIPIENTS)
+    : [];
+  return merged;
 }
 
 /**
@@ -30,9 +66,9 @@ function stateFromKnownShape(raw) {
   const base = freshState();
   return {
     schemaVersion: SCHEMA_VERSION,
-    entries: Array.isArray(raw.entries) ? raw.entries.slice(0, MAX_ENTRIES) : [],
-    panel: Object.assign({}, base.panel, raw.panel && typeof raw.panel === 'object' ? raw.panel : {}),
-    settings: Object.assign({}, base.settings, raw.settings && typeof raw.settings === 'object' ? raw.settings : {})
+    entries: Array.isArray(raw.entries) ? raw.entries.filter(isPlainObject).slice(0, MAX_ENTRIES) : [],
+    panel: Object.assign({}, base.panel, isPlainObject(raw.panel) ? raw.panel : {}),
+    settings: normalizeSettings(raw.settings)
   };
 }
 
@@ -48,6 +84,7 @@ function migrate(raw) {
 
   switch (raw.schemaVersion) {
     case 1:
+    case 2:
     case SCHEMA_VERSION:
       return stateFromKnownShape(raw);
     default:
@@ -98,6 +135,29 @@ function setSettings(state, patch) {
   return Object.assign({}, state, { settings: Object.assign({}, state.settings, patch) });
 }
 
+/**
+ * 相手（タイムゾーン・書式）を部分更新する。null は「自動」。
+ * @param {object} state
+ * @param {{tz?:?string, locale?:?string}} patch
+ */
+function setRecipient(state, patch) {
+  const recipient = Object.assign({}, state.settings.recipient, patch);
+  return setSettings(state, { recipient });
+}
+
+/**
+ * 最近の相手の先頭に追加する（同じ組合せは先頭へ移動、最大5件）。
+ * @param {object} state
+ * @param {{tz:string, locale:string}} recipient
+ */
+function pushRecentRecipient(state, recipient) {
+  if (!recipient || !recipient.tz) return state;
+  const item = { tz: recipient.tz, locale: recipient.locale || null };
+  const rest = (state.settings.recentRecipients || [])
+    .filter((r) => !(r.tz === item.tz && (r.locale || null) === item.locale));
+  return setSettings(state, { recentRecipients: [item].concat(rest).slice(0, MAX_RECENT_RECIPIENTS) });
+}
+
 function createMemoryBackend() {
   let store = {};
   return {
@@ -145,7 +205,10 @@ const api = {
   SCHEMA_VERSION,
   STORAGE_KEY,
   MAX_ENTRIES,
+  MAX_RECENT_RECIPIENTS,
   freshState,
+  defaultSettings,
+  normalizeSettings,
   stateFromKnownShape,
   migrate,
   isSameSlot,
@@ -154,6 +217,8 @@ const api = {
   clearEntries,
   setPanel,
   setSettings,
+  setRecipient,
+  pushRecentRecipient,
   createMemoryBackend,
   createChromeBackend,
   createStorage,
