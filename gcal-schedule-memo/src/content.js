@@ -153,7 +153,8 @@ function inGrid(target) {
 
 /** 抽出エラー/警告コードを表示文言へ。v1で保存された日本語の文字列はそのまま出す。 */
 function errorText(code) {
-  return t(`err_${code}`) || String(code || '');
+  const isCode = /^[A-Za-z0-9_]+$/.test(code || '');
+  return (isCode && t(`err_${code}`)) || String(code || '');
 }
 
 /**

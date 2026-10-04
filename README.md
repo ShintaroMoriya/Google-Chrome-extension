@@ -8,7 +8,7 @@
 
 | ディレクトリ | 概要 | ステータス | プロダクト管理ドキュメント |
 | :--- | :--- | :--- | :--- |
-| [`gcal-schedule-memo/`](./gcal-schedule-memo) | **日程アシスト**。Googleカレンダーから候補日時を3件まで集め、手入力・定型メール差し込み・コピーまで行う日程調整支援拡張機能 | 開発中（単体テスト済み・実機未検証） | [knowledge/product/gcal_schedule_memo.md](https://github.com/ShintaroMoriya/claude-business-os/blob/main/knowledge/product/gcal_schedule_memo.md) |
+| [`gcal-schedule-memo/`](./gcal-schedule-memo) | **日程アシスト / Schedule Assist**（v2.0.0）。Googleカレンダーから候補日時を3件まで集め、相手のタイムゾーン・言語・表記に合わせてコピーする日程調整支援拡張機能。iPhone風UI・英日対応・ショートカット付き | ストア公開中（v2.0.0は単体・E2Eテスト済み、実機確認待ち） | [knowledge/product/gcal_schedule_memo.md](https://github.com/ShintaroMoriya/claude-business-os/blob/main/knowledge/product/gcal_schedule_memo.md) |
 | [`sales-desk/`](./sales-desk) | サイドパネルによく使うツール・メールテンプレ・メモ・TODOを集約する営業向け作業台 | 導入済み（購入済みテンプレート） | - |
 | [`kigen-alert/`](./kigen-alert) | 見積・提出・フォローの期限をアイコンバッジの色と数字で知らせる期限アラート | 導入済み（購入済みテンプレート） | - |
 | [`keyword-highlighter/`](./keyword-highlighter) | 登録したキーワードをページ上で自動的に色付けするハイライター | 導入済み（購入済みテンプレート） | - |

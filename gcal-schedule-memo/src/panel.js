@@ -96,7 +96,8 @@ const PANEL_CSS = `
 
   ul.slots { list-style:none; margin:10px 0 0; padding:0 12px; display:grid; grid-template-columns:minmax(0,1fr); gap:8px; }
   .slot { position:relative; height:60px; border-radius:15px; display:flex; align-items:center; gap:11px; padding:0 8px 0 9px; }
-  .slot.filled { background:var(--card); box-shadow:0 1px 2px rgba(0,0,0,.06); animation: pop .42s var(--spring); }
+  .slot.filled { background:var(--card); box-shadow:0 1px 2px rgba(0,0,0,.06); }
+  .slot.filled.new { animation: pop .42s var(--spring); }
   .slot.empty { border:1.5px dashed var(--label3); color:var(--label3); }
   .slot.empty.next { border-color: color-mix(in srgb, var(--blue) 55%, transparent); color: color-mix(in srgb, var(--blue) 70%, transparent); }
   @keyframes pop { from { opacity:0; transform: scale(.9); } to { opacity:1; transform:none; } }
@@ -304,6 +305,7 @@ function createPanel(callbacks) {
   let clearArmedTimer = null;
   let hudTimer = null;
   let copyResetTimer = null;
+  let renderedIds = null; // 直前に描画した候補ID（新しく増えた行だけを弾ませるため）
 
   // ---- テンプレート（アイコンのセグメント） -----------------------------------
   templatesEl.innerHTML = TEMPLATE_BUTTONS.map((b) => `
@@ -380,7 +382,7 @@ function createPanel(callbacks) {
     langChipEl.title = langLabel;
   }
 
-  function filledSlotHtml(entry, ctx) {
+  function filledSlotHtml(entry, ctx, isNew) {
     const uiLoc = uiDisplayLocale(ctx);
     const own = format.slotParts(entry, { locale: uiLoc, targetTz: ctx.myTz, sourceTz: ctx.myTz });
     const ownLine = format.formatSlot(entry, { locale: uiLoc, targetTz: ctx.myTz, sourceTz: ctx.myTz });
@@ -397,7 +399,11 @@ function createPanel(callbacks) {
     let flag = '';
     if (entry.confidence === 'low' || entry.warning) {
       const level = entry.confidence === 'low' ? 'low' : 'medium';
-      const warnText = (entry.warning && (t(`warn_${entry.warning}`) || entry.warning)) || t('warn_timeFromPosition');
+      // v1で保存された警告は日本語の文章そのもの。コード（英数字）のときだけ i18n を引く。
+      const isCode = /^[A-Za-z0-9_]+$/.test(entry.warning || '');
+      const warnText = entry.warning
+        ? ((isCode && t(`warn_${entry.warning}`)) || entry.warning)
+        : t('warn_timeFromPosition');
       flag = `<span class="flag ${level}" title="${escapeHtml(warnText)}" aria-label="${escapeHtml(warnText)}">${icon('warning', 14)}</span>`;
     }
 
@@ -416,7 +422,7 @@ function createPanel(callbacks) {
     }
 
     return `
-      <li class="slot filled entry" data-id="${escapeHtml(entry.id)}" title="${escapeHtml(theirLine)}">
+      <li class="slot filled entry${isNew ? ' new' : ''}" data-id="${escapeHtml(entry.id)}" title="${escapeHtml(theirLine)}">
         <div class="tile" aria-hidden="true"><span class="m">${escapeHtml(month)}</span><span class="d">${z.d}</span></div>
         <div class="info">
           <span class="entry-text sr">${escapeHtml(ownLine)}</span>
@@ -449,8 +455,11 @@ function createPanel(callbacks) {
     const showGuide = !state.settings.onboarded && state.panel.pickMode && entries.length === 0;
     let html = '';
     for (let i = 0; i < MAX_SLOTS; i += 1) {
-      html += entries[i] ? filledSlotHtml(entries[i], ctx) : emptySlotHtml(i, i === entries.length, showGuide && i === 0);
+      html += entries[i]
+        ? filledSlotHtml(entries[i], ctx, !!renderedIds && !renderedIds.has(entries[i].id))
+        : emptySlotHtml(i, i === entries.length, showGuide && i === 0);
     }
+    renderedIds = new Set(entries.map((e) => e.id));
     slotsEl.innerHTML = html;
     slotsEl.setAttribute('aria-label', `${entries.length} / ${MAX_SLOTS}`);
     const dots = dotsEl.querySelectorAll('span');
