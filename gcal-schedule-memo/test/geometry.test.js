@@ -66,7 +66,7 @@ module.exports = [
     }
   },
   {
-    name: 'buildGridGeometry: 不一致(5%超)ならhour-railを採用しmedium',
+    name: 'buildGridGeometry: 不一致(5%超)ならクリックした列そのもの(column-span)を優先しmedium',
     fn: () => {
       // column-spanは40px/h相当、hour-railは48px/h → 乖離約16.7%
       const geometry = buildGridGeometry(
@@ -74,8 +74,8 @@ module.exports = [
         syntheticHourPoints([9, 10, 11])
       );
       assert.equal(geometry.confidence, 'medium');
-      assert.equal(geometry.model, 'hour-rail');
-      assert.ok(Math.abs(geometry.pxPerHour - PX_PER_HOUR) < 1e-9);
+      assert.equal(geometry.model, 'column-span');
+      assert.ok(Math.abs(geometry.pxPerHour - 40) < 1e-9);
     }
   },
   {

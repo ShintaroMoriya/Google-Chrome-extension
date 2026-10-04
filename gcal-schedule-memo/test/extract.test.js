@@ -72,6 +72,7 @@ function matchSelector(node, sel) {
 function fakeDoc(body, elementsAtPoint) {
   return {
     body,
+    querySelector: (sel) => body.querySelector(sel),
     elementsFromPoint: () => elementsAtPoint || []
   };
 }
