@@ -9,12 +9,16 @@
  *
  * 2つのモデルを独立に構築し、互いにクロスチェックする:
  *   - column-span モデル: 列要素の矩形が0:00〜24:00をカバーしていると仮定
- *   - hour-rail モデル : 時刻目盛りラベル（複数点）から線形回帰で
- *                        1時間あたりのpx数と原点(0:00の位置)を実測する
- *   両者が近ければ confidence を上げ、乖離していれば hour-rail を優先し
- *   confidence を下げる（実測の方が仮定が少ないため）。
- *   目盛りラベルが取れない場合は column-span 単独、それも無ければ
- *   既定値（48px/時）にフォールバックする。
+ *   - hour-rail  モデル : 時刻目盛りラベル（複数点）から線形回帰で
+ *                         1時間あたりのpx数と原点(0:00の位置)を実測する
+ *
+ * v1.2.0 の変更点（「クリック位置から時刻を算出できませんでした」の修正）:
+ *   - hour-rail は「当てはまりが極めて良い(r2>=0.995)」かつ「1時間あたり
+ *     10〜300px」という妥当性を満たすときだけ採用する。以前は日付数字などの
+ *     ノイズ点で回帰が成立してしまい、0.5px/時のような値が採用されていた。
+ *   - column-span の列が24時間分の高さとして妥当（10〜300px/時）なら、
+ *     実際にクリックした要素そのものの矩形なので hour-rail より優先する。
+ *   - snapMinutes に 'floor' モードを追加（クリックした位置を含む枠に揃える）。
  */
 'use strict';
 
@@ -25,6 +29,9 @@
 
 const DEFAULT_PX_PER_HOUR = 48;
 const AGREEMENT_THRESHOLD_RATIO = 0.05; // 5%以内なら一致とみなす
+const MIN_PX_PER_HOUR = 10;  // これ未満は「時間グリッドではない」とみなす
+const MAX_PX_PER_HOUR = 300; // これ超も同様
+const MIN_RAIL_R2 = 0.995;   // hour-rail の当てはまりの下限
 
 /**
  * @typedef {Object} GridGeometry
@@ -34,21 +41,27 @@ const AGREEMENT_THRESHOLD_RATIO = 0.05; // 5%以内なら一致とみなす
  * @property {'high'|'medium'|'low'} confidence
  */
 
+function isPlausiblePxPerHour(v) {
+  return Number.isFinite(v) && v >= MIN_PX_PER_HOUR && v <= MAX_PX_PER_HOUR;
+}
+
 /**
  * 列要素の矩形（0:00〜24:00を丸ごとカバーしている前提）から
- * column-span モデルを作る。
+ * column-span モデルを作る。1時間あたりのpxが非現実的な場合は null。
  * @param {{top:number, height:number}} rect
  * @returns {{pxPerHour:number, originY:number} | null}
  */
 function columnSpanModel(rect) {
   if (!rect || !(rect.height > 0)) return null;
-  return { pxPerHour: rect.height / 24, originY: rect.top };
+  const pxPerHour = rect.height / 24;
+  if (!isPlausiblePxPerHour(pxPerHour)) return null;
+  return { pxPerHour, originY: rect.top };
 }
 
 /**
  * 時刻目盛りラベルの点列 [{hour, top}] から、最小二乗法で
  * 「1時間あたりのpx数」と「0:00の位置」を推定する（hour-rail モデル）。
- * 点が2つ未満なら推定不能として null を返す。
+ * 点が2つ未満、傾きが非現実的、当てはまりが悪い場合は null を返す。
  * @param {Array<{hour:number, top:number}>} points
  * @returns {{pxPerHour:number, originY:number, r2:number} | null}
  */
@@ -68,15 +81,16 @@ function hourRailModel(points) {
   if (denom === 0) return null; // 全点が同じ時刻（傾き不定）
 
   const slope = (n * sumXY - sumX * sumY) / denom; // px per hour
-  const intercept = (sumY - slope * sumX) / n; // top at hour=0
+  const intercept = (sumY - slope * sumX) / n;     // top at hour=0
 
-  if (!(slope > 0)) return null; // 下に行くほど時刻が進む前提が崩れている
+  if (!isPlausiblePxPerHour(slope)) return null; // 下に行くほど時刻が進み、かつ現実的な密度
 
   // 決定係数 r2（当てはまりの良さ）
   const meanY = sumY / n;
   const ssTot = pts.reduce((s, p) => s + (p.top - meanY) ** 2, 0);
   const ssRes = pts.reduce((s, p) => s + (p.top - (slope * p.hour + intercept)) ** 2, 0);
   const r2 = ssTot === 0 ? 1 : 1 - ssRes / ssTot;
+  if (r2 < MIN_RAIL_R2) return null; // ノイズ点が混ざっている
 
   return { pxPerHour: slope, originY: intercept, r2 };
 }
@@ -84,6 +98,11 @@ function hourRailModel(points) {
 /**
  * column-span モデルと hour-rail モデルを突き合わせ、最終的な
  * GridGeometry を1つ決める。
+ *   - 両方あり・一致     → agree / high（値は column-span）
+ *   - 両方あり・不一致   → column-span / medium（クリックした列そのものを優先）
+ *   - column のみ        → column-span / medium
+ *   - rail のみ          → hour-rail / medium
+ *   - どちらも無い       → default / low
  * @param {{top:number, height:number} | null} columnRect
  * @param {Array<{hour:number, top:number}>} hourLabelPoints
  * @returns {GridGeometry}
@@ -93,31 +112,29 @@ function buildGridGeometry(columnRect, hourLabelPoints) {
   const railModel = hourRailModel(hourLabelPoints);
 
   if (colModel && railModel) {
-    const diffRatio = Math.abs(colModel.pxPerHour - railModel.pxPerHour) / railModel.pxPerHour;
+    const diffRatio = Math.abs(colModel.pxPerHour - railModel.pxPerHour) / colModel.pxPerHour;
     if (diffRatio <= AGREEMENT_THRESHOLD_RATIO) {
-      // 独立2系統が一致 → 高信頼。値は実測(hour-rail)を採用する。
       return {
-        pxPerHour: railModel.pxPerHour,
-        originY: railModel.originY,
+        pxPerHour: colModel.pxPerHour,
+        originY: colModel.originY,
         model: 'agree',
         confidence: 'high'
       };
     }
-    // 不一致 → 実測(hour-rail)の方が仮定が少ないためそちらを優先。
     return {
-      pxPerHour: railModel.pxPerHour,
-      originY: railModel.originY,
-      model: 'hour-rail',
+      pxPerHour: colModel.pxPerHour,
+      originY: colModel.originY,
+      model: 'column-span',
       confidence: 'medium'
     };
   }
 
-  if (railModel) {
-    return { pxPerHour: railModel.pxPerHour, originY: railModel.originY, model: 'hour-rail', confidence: 'medium' };
-  }
-
   if (colModel) {
     return { pxPerHour: colModel.pxPerHour, originY: colModel.originY, model: 'column-span', confidence: 'medium' };
+  }
+
+  if (railModel) {
+    return { pxPerHour: railModel.pxPerHour, originY: railModel.originY, model: 'hour-rail', confidence: 'medium' };
   }
 
   return { pxPerHour: DEFAULT_PX_PER_HOUR, originY: 0, model: 'default', confidence: 'low' };
@@ -134,13 +151,18 @@ function yToMinutes(clientY, geometry) {
 }
 
 /**
- * 分を指定単位で最近傍丸めする（例: 15分単位）。
+ * 分を指定単位で丸める。
+ *   mode 'nearest'（既定）: 最近傍（例: 15分単位）
+ *   mode 'floor'          : 単位の区切りに切り捨て。
+ *                           「クリックした位置を含む枠」を選ぶ用途（1時間単位など）。
  * @param {number} minutes
  * @param {number} snapTo 丸め単位（分）
+ * @param {'nearest'|'floor'} [mode]
  * @returns {number}
  */
-function snapMinutes(minutes, snapTo) {
-  return Math.round(minutes / snapTo) * snapTo;
+function snapMinutes(minutes, snapTo, mode) {
+  const q = minutes / snapTo;
+  return (mode === 'floor' ? Math.floor(q) : Math.round(q)) * snapTo;
 }
 
 /**
@@ -164,9 +186,9 @@ function minutesToHm(minutes) {
  * ではなく、時刻目盛りラベルなど独立した情報源（hour-railモデル）由来で
  * あることが前提。rect自身から算出したpxPerHourを渡すと
  * 「height < (height/24)*20」は数学的に常に偽になり判定が機能しない。
- * collectHourLabelPoints は通常のグリッド全体を走査するため、実運用では
- * hour-railモデルが得られるケースが大半だが、目盛りが1つも見つからない
- * 場合（既定値フォールバック）はこの判定が効かない点は既知の限界とする。
+ * （v1.2.0 以降は columnSpanModel が 10〜300px/時 の範囲外を弾くため、
+ *   終日行（高さ数十px）は column-span モデルが null になり、default 48px/時
+ *   にフォールバック → 本関数で終日行と判定される。）
  * @param {{height:number}} rect
  * @param {number} pxPerHour
  * @returns {boolean}

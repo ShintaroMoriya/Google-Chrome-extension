@@ -4,6 +4,8 @@
  * カレンダー上の候補取得に加え、手入力した候補と定型メールのコピーを扱う。
  * 状態の更新とクリップボード操作は呼び出し元に委譲し、UIは描画とイベント通知
  * だけを担う。
+ *
+ * v1.2.0: 取得設定（刻み / 長さ / 予定ブロックのクリック方法）の切替UIを追加。
  */
 'use strict';
 
@@ -11,6 +13,24 @@
 
 const Z_INDEX = 2147483000;
 const CONFIDENCE_LABEL = { high: null, medium: null, low: '要確認' };
+
+// 設定UIの選択肢（値は content.js 側の許可リストと揃える）
+const SNAP_OPTIONS = [
+  { value: 15, label: '15分' },
+  { value: 30, label: '30分' },
+  { value: 60, label: '1時間' }
+];
+const DURATION_OPTIONS = [
+  { value: 30, label: '30分' },
+  { value: 60, label: '1時間' },
+  { value: 90, label: '1.5時間' },
+  { value: 120, label: '2時間' }
+];
+const CHIP_MODE_OPTIONS = [
+  { value: 'whole', label: '予定全体' },
+  { value: 'slice', label: 'クリック位置から' }
+];
+const DEFAULT_SETTINGS = { snapMin: 15, durationMin: 60, chipMode: 'whole' };
 
 function getFormatApi() {
   return (typeof module !== 'undefined' && module.exports)
@@ -58,6 +78,17 @@ const PANEL_CSS = `
   .badge { font-size:10px; padding:1px 6px; border-radius:999px; background:#fdd663; color:#3c2f00; }
   .entry-remove { border:none; background:transparent; cursor:pointer; color:inherit; opacity:.55; font-size:14px; min-width:24px; min-height:24px; }
   .entry-remove:hover { opacity:1; }
+  .settings { margin-top:9px; padding:8px 9px; border-radius:8px; background:#f8f9fa; display:grid; gap:6px; }
+  @media (prefers-color-scheme: dark) { .settings { background:#35363a; } }
+  .setting-row { display:flex; align-items:center; gap:8px; }
+  .setting-label { width:64px; flex:none; font-size:11px; color:#5f6368; }
+  @media (prefers-color-scheme: dark) { .setting-label { color:#bdc1c6; } }
+  .seg { flex:1; display:flex; border:1px solid rgba(0,0,0,.18); border-radius:6px; overflow:hidden; }
+  @media (prefers-color-scheme: dark) { .seg { border-color:rgba(255,255,255,.25); } }
+  .seg button { flex:1; min-width:0; padding:4px 2px; border:none; border-right:1px solid rgba(0,0,0,.12); background:transparent; color:inherit; font:inherit; font-size:11px; cursor:pointer; white-space:nowrap; }
+  @media (prefers-color-scheme: dark) { .seg button { border-right-color:rgba(255,255,255,.18); } }
+  .seg button:last-child { border-right:none; }
+  .seg button.on { background:#1a73e8; color:#fff; }
   .manual { margin-top:9px; padding:9px; border-radius:8px; background:#f8f9fa; }
   @media (prefers-color-scheme: dark) { .manual { background:#35363a; } }
   .manual-row { display:grid; grid-template-columns:1fr 72px 72px 42px; gap:5px; align-items:center; }
@@ -90,6 +121,19 @@ function clampToViewport(x, y, w, h) {
 }
 
 /**
+ * 区切りボタン（セグメント）群のHTMLを作る。
+ * @param {string} key data-setting に入れる設定キー
+ * @param {Array<{value:(number|string), label:string}>} options
+ * @returns {string}
+ */
+function segHtml(key, options) {
+  const buttons = options
+    .map((o) => `<button type="button" data-setting="${key}" data-value="${o.value}">${o.label}</button>`)
+    .join('');
+  return `<div class="seg" role="group">${buttons}</div>`;
+}
+
+/**
  * @param {object} callbacks
  * @param {() => Promise<{ok:boolean,message?:string}>} callbacks.onCopyCandidates
  * @param {(templateId:string) => Promise<{ok:boolean,message?:string}>} callbacks.onCopyTemplate
@@ -97,6 +141,7 @@ function clampToViewport(x, y, w, h) {
  * @param {(id:string) => void} callbacks.onRemove
  * @param {() => void} callbacks.onClearAll
  * @param {(on:boolean) => void} callbacks.onPickModeToggle
+ * @param {(patch:{snapMin?:number,durationMin?:number,chipMode?:string}) => void} callbacks.onSettingsChange
  * @param {(x:number,y:number) => void} callbacks.onMoveEnd
  * @param {() => void} callbacks.onCloseClick
  */
@@ -124,6 +169,20 @@ function createPanel(callbacks) {
     <div class="body">
       <p class="section-title">候補日時</p>
       <div class="list-wrap"></div>
+      <div class="settings" aria-label="取得設定">
+        <div class="setting-row">
+          <span class="setting-label">刻み</span>
+          ${segHtml('snapMin', SNAP_OPTIONS)}
+        </div>
+        <div class="setting-row">
+          <span class="setting-label">長さ</span>
+          ${segHtml('durationMin', DURATION_OPTIONS)}
+        </div>
+        <div class="setting-row">
+          <span class="setting-label">予定ブロック</span>
+          ${segHtml('chipMode', CHIP_MODE_OPTIONS)}
+        </div>
+      </div>
       <div class="manual" aria-label="候補日時を手入力">
         <div class="manual-row">
           <input data-manual="date" type="date" aria-label="日付">
@@ -157,6 +216,7 @@ function createPanel(callbacks) {
   const manualEndEl = panelEl.querySelector('[data-manual="end"]');
   const manualAddBtnEl = panelEl.querySelector('[data-action="manual-add"]');
   const hintEl = panelEl.querySelector('.hint');
+  const settingButtons = Array.from(panelEl.querySelectorAll('button[data-setting]'));
   let clearArmed = false;
   let clearArmedTimer = null;
 
@@ -184,7 +244,7 @@ function createPanel(callbacks) {
     templateListEl.querySelectorAll('button').forEach((button) => { button.disabled = !canCopy; });
     hintEl.textContent = canCopy
       ? `${entries.length} / 3 件。コピー後、メール本文で貼り付けてください。`
-      : 'カレンダーの空き枠をクリックするか、下で日時を入力してください。';
+      : 'カレンダーの空き枠・予定をクリックするか、下で日時を入力してください。';
 
     if (!canCopy) {
       const empty = document.createElement('div');
@@ -225,6 +285,14 @@ function createPanel(callbacks) {
     listWrapEl.appendChild(ul);
   }
 
+  function renderSettings(settings) {
+    const s = Object.assign({}, DEFAULT_SETTINGS, settings || {});
+    for (const button of settingButtons) {
+      const key = button.dataset.setting;
+      button.classList.toggle('on', String(s[key]) === button.dataset.value);
+    }
+  }
+
   function renderTemplateButtons() {
     templateListEl.innerHTML = '';
     for (const template of templates) {
@@ -263,6 +331,7 @@ function createPanel(callbacks) {
     pickToggleEl.classList.toggle('on', !!state.panel.pickMode);
     pickToggleEl.textContent = state.panel.pickMode ? '取得中' : '取得モード';
     renderEntries(state.entries);
+    renderSettings(state.settings);
   }
 
   function flashEntry(id) {
@@ -274,6 +343,15 @@ function createPanel(callbacks) {
 
   pickToggleEl.addEventListener('click', () => callbacks.onPickModeToggle(!pickToggleEl.classList.contains('on')));
   closeBtnEl.addEventListener('click', () => callbacks.onCloseClick());
+
+  settingButtons.forEach((button) => {
+    button.addEventListener('click', () => {
+      const key = button.dataset.setting;
+      const raw = button.dataset.value;
+      const value = key === 'chipMode' ? raw : Number(raw);
+      if (callbacks.onSettingsChange) callbacks.onSettingsChange({ [key]: value });
+    });
+  });
 
   copyCandidatesBtnEl.addEventListener('click', async () => {
     const result = await callbacks.onCopyCandidates();

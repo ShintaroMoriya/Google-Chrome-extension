@@ -9,12 +9,16 @@
  *   data-datekey / data-eventid / role / インラインstyle という
  *   比較的安定した層を主軸に置く。
  *
- * 重要な注意:
- *   このコンテナからは実際のGoogleカレンダーにログインしてDOMを検証できない。
- *   そのため CONFIG 内のセレクタ・正規表現は「公開されている実装例・実DOMサンプル
- *   から調査した最有力候補」であり、tools/probe.js の実行結果を見て
- *   確定させる前提のベストエフォート値である（README「キャリブレーション」参照）。
- *   どの層でも日時が確定できない場合は必ず {error} を返し、値を捏造しない。
+ * v1.2.0 の変更点:
+ *   - 時刻目盛りラベルの判定を厳密化（"28" "1" などの日付数字を拾わない）。
+ *     これが「クリック位置から時刻を算出できませんでした」の原因だった。
+ *   - 空きマスのクリックは、クリック位置を含む枠（snapMin 単位）に切り捨てる。
+ *   - 予定ブロックのクリックを2モードに対応:
+ *       chipMode 'whole' : 予定全体（従来どおり）
+ *       chipMode 'slice' : クリックした位置を含む durationMin 分だけを切り出す
+ *     プレビューと確定値は resolveChipPreview 1箇所で計算し、ずれない。
+ *
+ * どの層でも日時が確定できない場合は必ず {error} を返し、値を捏造しない。
  */
 'use strict';
 
@@ -44,14 +48,16 @@ const CONFIG = {
   // sr-only（スクリーンリーダー専用）ラベルを持つ子要素の候補セレクタ。
   // 先頭から順に試し、最初に非空のテキストが取れたものを使う。
   CHIP_LABEL_SELECTORS: ['.XuJrye', '[aria-hidden="false"]'],
-  // 時刻目盛りラベルらしきテキストの正規表現（hour-railモデル用）。
-  HOUR_LABEL_RE: /^(午前|午後)?\s*(\d{1,2})\s*(時)?$|^(\d{1,2})\s*(am|pm)$/i,
+  // 時刻目盛りラベルを探す範囲。広すぎると日付数字などのノイズを拾う。
+  GRID_ROOT_SELECTOR: '[role="main"]',
   // タスク/リマインダー等、日程調整の対象にしないチップを弾くための
   // data-eventid の接頭辞（Base64エンコードされているため前方一致で判定できる
   // 保証はない。分かる範囲でのベストエフォート）。
   EXCLUDE_EVENTID_PREFIXES: ['tasks_'],
   DEFAULT_DURATION_MIN: 60,
-  SNAP_MIN: 15
+  SNAP_MIN: 15,
+  // 予定ブロッククリック時の既定モード: 'whole'（予定全体）| 'slice'（クリック位置のdurationMin分）
+  DEFAULT_CHIP_MODE: 'whole'
 };
 
 /**
@@ -101,7 +107,7 @@ function isExcludedChip(chip) {
 }
 
 /**
- * 予定チップのクリックから日時エントリを抽出する。
+ * 予定チップのクリックから日時エントリ（予定全体）を抽出する。
  * @param {Element} chip
  * @returns {object} Pick または {error: string}
  */
@@ -122,9 +128,6 @@ function extractFromChip(chip) {
 
   const datekeyHit = findDatekeyAncestor(chip);
   if (datekeyHit) {
-    // 終日行（時刻グリッドの外）にも data-datekey が付くことがあるため、
-    // 高さで簡易判定する。ここでは pxPerHour が不明なため、
-    // 明らかに低い（時刻グリッド1コマ未満相当）場合のみ疑わしいとみなす。
     dateResult = datekeyHit.decoded;
     dateSource = 'datekey';
   } else {
@@ -170,6 +173,67 @@ function extractFromChip(chip) {
 }
 
 /**
+ * 予定ブロックのクリックから、追加される値(pick)とハイライト矩形(rect)を返す。
+ *
+ * chipMode 'whole': 予定全体（rect はチップ自身の矩形）。
+ * chipMode 'slice': チップ内のクリック位置を時刻に換算し、snapMin 単位に切り捨てた
+ *                   位置から durationMin 分だけを切り出す。
+ *                   チップ自身の矩形が「開始〜終了」を線形に表している性質を使うので、
+ *                   時刻目盛りや列の矩形（DOM構造）に依存しない。
+ *                   予定が durationMin 以下なら予定全体を返す。
+ *                   切り出しは常に予定の範囲内に収め、長さは durationMin を保つ。
+ * @param {Element} chip
+ * @param {{clientY:number}} pointer
+ * @param {{chipMode?:string, durationMin?:number, snapMin?:number}} [options]
+ * @returns {{pick: object, rect: ?{top:number,left:number,width:number,height:number}}}
+ */
+function resolveChipPreview(chip, pointer, options) {
+  const mode = (options && options.chipMode) || CONFIG.DEFAULT_CHIP_MODE;
+  const durationMin = (options && options.durationMin) || CONFIG.DEFAULT_DURATION_MIN;
+  const snapMin = (options && options.snapMin) || CONFIG.SNAP_MIN;
+
+  const whole = extractFromChip(chip);
+  if (whole.error) return { pick: whole, rect: null };
+
+  const chipRect = chip.getBoundingClientRect();
+  const wholeRect = {
+    left: chipRect.left, top: chipRect.top, width: chipRect.width, height: chipRect.height
+  };
+  if (mode !== 'slice') return { pick: whole, rect: wholeRect };
+
+  const startMin = whole.sh * 60 + whole.sm;
+  const endMin = whole.eh * 60 + whole.em;
+  const spanMin = endMin - startMin;
+
+  // 予定が切り出し長以下、または矩形が不正なら、切り出さず全体を返す。
+  if (spanMin <= durationMin || !(chipRect.height > 0) || !pointer || !Number.isFinite(pointer.clientY)) {
+    return { pick: whole, rect: wholeRect };
+  }
+
+  const ratio = Math.min(1, Math.max(0, (pointer.clientY - chipRect.top) / chipRect.height));
+  const clickedMin = startMin + ratio * spanMin;
+  const rawStart = snapMinutes(clickedMin, snapMin, 'floor');
+  const sliceStart = Math.min(Math.max(rawStart, startMin), endMin - durationMin);
+  const sliceEnd = sliceStart + durationMin;
+
+  const s = minutesToHm(sliceStart);
+  const e = minutesToHm(sliceEnd);
+  if (!s || !e) return { pick: whole, rect: wholeRect };
+
+  const pick = Object.assign({}, whole, {
+    sh: s.h, sm: s.m, eh: e.h, em: e.m,
+    source: 'chip-slice'
+  });
+  const rect = {
+    left: chipRect.left,
+    width: chipRect.width,
+    top: chipRect.top + ((sliceStart - startMin) / spanMin) * chipRect.height,
+    height: (durationMin / spanMin) * chipRect.height
+  };
+  return { pick, rect };
+}
+
+/**
  * clientX/Y から、対応する日付列の要素を解決する。
  * closest → elementsFromPoint の順でフォールバックする。
  * @param {Element} directTarget e.target（既に closest 済みの場合はそのまま使う）
@@ -193,6 +257,49 @@ function resolveDateColumn(directTarget, clientX, clientY, doc) {
 }
 
 /**
+ * 時刻目盛りラベルの文字列を 0-23 の時に変換する。該当しなければ null。
+ * 受け付ける形式（"28" のような数字だけの文字列は意図的に受け付けない）:
+ *   "09:00" / "9:00"   24時間表記（ロケール「日本語」の既定）
+ *   "午前9時" / "午後3時" / "午前9" / "午後3"
+ *   "9時"
+ *   "9am" / "3 pm"
+ * @param {string} text
+ * @returns {number | null}
+ */
+function parseHourLabel(text) {
+  const t = (text || '').trim();
+  if (!t || t.length > 8) return null;
+
+  let m = /^(\d{1,2}):00$/.exec(t);
+  if (m) {
+    const h = Number(m[1]);
+    return h >= 0 && h <= 23 ? h : null;
+  }
+
+  m = /^(午前|午後)\s*(\d{1,2})\s*時?$/.exec(t);
+  if (m) {
+    const h = Number(m[2]);
+    if (h < 0 || h > 12) return null;
+    return m[1] === '午後' ? (h === 12 ? 12 : h + 12) : (h === 12 ? 0 : h);
+  }
+
+  m = /^(\d{1,2})\s*時$/.exec(t);
+  if (m) {
+    const h = Number(m[1]);
+    return h >= 0 && h <= 23 ? h : null;
+  }
+
+  m = /^(\d{1,2})\s*(am|pm)$/i.exec(t);
+  if (m) {
+    const h = Number(m[1]);
+    if (h < 1 || h > 12) return null;
+    return m[2].toLowerCase() === 'pm' ? (h === 12 ? 12 : h + 12) : (h === 12 ? 0 : h);
+  }
+
+  return null;
+}
+
+/**
  * グリッドコンテナ内から時刻目盛りラベルらしき要素を集め、
  * hour-railモデル構築用の点列 [{hour, top}] に変換する。
  * @param {Element} gridRoot 探索範囲（広すぎるとノイズが増える）
@@ -206,26 +313,8 @@ function collectHourLabelPoints(gridRoot) {
     // 子要素を持つ大きなコンテナはラベルではないので除外し、
     // テキストノードに近い葉要素だけを見る。
     if (el.children && el.children.length > 0) continue;
-    const text = (el.textContent || '').trim();
-    if (!text || text.length > 8) continue;
-    const m = CONFIG.HOUR_LABEL_RE.exec(text);
-    if (!m) continue;
-
-    let hour;
-    if (m[2] != null) {
-      // 「午前10時」「午後3時」形式
-      const ampm = m[1];
-      const h = Number(m[2]);
-      hour = ampm === '午後' ? (h === 12 ? 12 : h + 12) : (h === 12 ? 0 : h);
-    } else if (m[4] != null) {
-      // "10am" 形式
-      const h = Number(m[4]);
-      const ampm = m[5].toLowerCase();
-      hour = ampm === 'pm' ? (h === 12 ? 12 : h + 12) : (h === 12 ? 0 : h);
-    } else {
-      continue;
-    }
-
+    const hour = parseHourLabel(el.textContent);
+    if (hour == null) continue;
     const rect = el.getBoundingClientRect();
     points.push({ hour, top: rect.top });
   }
@@ -240,6 +329,9 @@ function collectHourLabelPoints(gridRoot) {
  * この関数だけを呼ぶことで、"プレビューで見えていた時刻" と
  * "クリックで実際に追加される時刻" が計算上ずれることのないようにしている
  * （幾何モデルを2箇所に実装しないことでWYSIWYGを保証する）。
+ *
+ * 開始時刻はクリック位置を含む snapMin 単位の枠に切り捨てる
+ * （1時間単位なら 10:23 のクリック → 10:00〜11:00）。
  * @param {{clientX:number, clientY:number, target:Element}} clickEvent
  * @param {Document} doc
  * @param {{durationMin?:number, snapMin?:number}} [options]
@@ -256,7 +348,10 @@ function resolveSlotPreview(clickEvent, doc, options) {
   }
 
   const rect = columnHit.el.getBoundingClientRect();
-  const hourPoints = collectHourLabelPoints(doc ? doc.body : null);
+  const gridRoot = doc
+    ? (doc.querySelector(CONFIG.GRID_ROOT_SELECTOR) || doc.body)
+    : null;
+  const hourPoints = collectHourLabelPoints(gridRoot);
   const geometry = buildGridGeometry(rect, hourPoints);
 
   if (looksLikeAllDayRow(rect, geometry.pxPerHour)) {
@@ -264,7 +359,7 @@ function resolveSlotPreview(clickEvent, doc, options) {
   }
 
   const rawMinutes = yToMinutes(clickEvent.clientY, geometry);
-  const snapped = snapMinutes(rawMinutes, snapMin);
+  const snapped = snapMinutes(rawMinutes, snapMin, 'floor');
   const start = minutesToHm(snapped);
   if (!start) {
     return { pick: { error: 'クリック位置から時刻を算出できませんでした' }, rect: null };
@@ -322,7 +417,9 @@ const api = {
   getChipLabelText,
   isExcludedChip,
   extractFromChip,
+  resolveChipPreview,
   resolveDateColumn,
+  parseHourLabel,
   collectHourLabelPoints,
   resolveSlotPreview,
   extractFromSlot
