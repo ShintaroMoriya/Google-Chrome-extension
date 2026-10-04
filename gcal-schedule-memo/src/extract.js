@@ -455,14 +455,14 @@ function collectHourLabelPoints(gridRoot) {
 function detectCalendarOffset(doc) {
   if (!doc || !doc.body || typeof doc.createTreeWalker !== 'function' || typeof NodeFilter === 'undefined') return null;
   const tzApi = (typeof module !== 'undefined') ? require('./tz.js') : globalThis.GSM.tz;
-  const root = doc.querySelector(CONFIG.GRID_ROOT_SELECTOR) || doc.body;
-  const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  // 左上のラベルがメイン領域の外にある場合に備え、body 全体を見る（完全一致のみ採用）。
+  const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT);
   let node = walker.nextNode();
   let scanned = 0;
   while (node && scanned < 20000) {
     scanned += 1;
     const text = node.nodeValue;
-    if (text && text.length <= 12 && /^(?:\s*)(GMT|UTC)/i.test(text)) {
+    if (text && text.length <= 12 && /^\s*(GMT|UTC)/i.test(text)) {
       const off = tzApi.parseGmtLabel(text);
       if (off != null) return off;
     }

@@ -13,6 +13,10 @@
  *     default_popup が無いことで chrome.action.onClicked が発火する。
  *   - Googleカレンダー以外のタブでアイコンを押された場合は、
  *     カレンダーの新規タブを開く（迷わせない）。
+ *
+ * v2.0.0: キーボードショートカット
+ *   - _execute_action（既定 Alt+Shift+S）は chrome.action.onClicked として届く。
+ *   - copy-message（既定 Alt+Shift+C）は、アクティブなカレンダータブへ GSM_COPY を送る。
  */
 'use strict';
 
@@ -36,5 +40,20 @@ chrome.action.onClicked.addListener(async (tab) => {
     } catch (_) {
       // タブが既に閉じられている等、これ以上できることはない。
     }
+  }
+});
+
+chrome.commands.onCommand.addListener(async (command, tab) => {
+  if (command !== 'copy-message') return;
+  let target = tab;
+  if (!target) {
+    const [active] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+    target = active;
+  }
+  if (!target || !target.url || !target.url.startsWith(CALENDAR_URL_PREFIX)) return;
+  try {
+    await chrome.tabs.sendMessage(target.id, { type: 'GSM_COPY' });
+  } catch (_) {
+    // コンテンツスクリプト未注入。アイコンからの開閉で再注入されるので何もしない。
   }
 });

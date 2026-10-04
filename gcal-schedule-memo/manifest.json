@@ -1,16 +1,34 @@
 {
   "manifest_version": 3,
-  "name": "日程アシスト",
-  "version": "1.1.0",
-  "description": "Googleカレンダーの候補日時を3件まで集め、定型メールに差し込んでコピーできる日程調整アシストです。",
-  "permissions": ["storage"],
-  "host_permissions": ["https://calendar.google.com/*"],
+  "name": "__MSG_extName__",
+  "version": "2.0.0",
+  "description": "__MSG_extDescription__",
+  "default_locale": "en",
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "https://calendar.google.com/*"
+  ],
   "action": {
-    "default_title": "日程アシスト 表示/非表示（クリックで開閉）",
+    "default_title": "__MSG_actionTitle__",
     "default_icon": {
       "16": "icons/icon-16.png",
       "48": "icons/icon-48.png",
       "128": "icons/icon-128.png"
+    }
+  },
+  "commands": {
+    "_execute_action": {
+      "suggested_key": {
+        "default": "Alt+Shift+S"
+      }
+    },
+    "copy-message": {
+      "suggested_key": {
+        "default": "Alt+Shift+C"
+      },
+      "description": "__MSG_cmdCopy__"
     }
   },
   "background": {
@@ -18,8 +36,12 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://calendar.google.com/*"],
+      "matches": [
+        "https://calendar.google.com/*"
+      ],
       "js": [
+        "src/i18n.js",
+        "src/tz.js",
         "src/format.js",
         "src/datekey.js",
         "src/timeparse.js",
@@ -27,6 +49,7 @@
         "src/extract.js",
         "src/store.js",
         "src/templates.js",
+        "src/icons.js",
         "src/panel.js",
         "src/preview.js",
         "src/content.js"

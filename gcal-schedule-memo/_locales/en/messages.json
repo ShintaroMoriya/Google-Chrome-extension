@@ -127,7 +127,7 @@
     "message": "Automatic"
   },
   "tzMismatch": {
-    "message": "Google Calendar shows $value$. Check “My time zone” in settings.",
+    "message": "Google Calendar shows $value$. Make sure “My time zone” matches it.",
     "placeholders": {
       "value": {
         "content": "$1",

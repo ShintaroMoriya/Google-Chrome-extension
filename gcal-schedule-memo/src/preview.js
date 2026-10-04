@@ -30,27 +30,43 @@ const PREVIEW_CSS = `
   .box {
     position: fixed;
     box-sizing: border-box;
-    border: 2px solid #1a73e8;
-    background: rgba(26,115,232,.16);
-    border-radius: 4px;
+    border: 2px solid #0a84ff;
+    background: rgba(10,132,255,.14);
+    border-radius: 8px;
     display: none;
     pointer-events: none;
+    transition: top .08s ease-out, height .08s ease-out;
   }
-  .box.conf-medium { border-color: #f9ab00; background: rgba(249,171,0,.16); }
-  .box.conf-low { border-color: #d93025; background: rgba(217,48,37,.14); }
+  .box.conf-medium { border-color: #ff9f0a; background: rgba(255,159,10,.15); }
+  .box.conf-low { border-color: #ff453a; background: rgba(255,69,58,.13); }
+  .box.full { border-color: rgba(142,142,147,.9); border-style: dashed; background: rgba(142,142,147,.12); }
   .label {
     position: fixed;
     display: none;
     pointer-events: none;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', sans-serif;
+    align-items: center;
+    gap: 6px;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, Roboto, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif;
     font-size: 12px;
-    padding: 3px 8px;
-    border-radius: 6px;
-    background: #202124;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: rgba(28,28,30,.88);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
     color: #fff;
     white-space: nowrap;
-    box-shadow: 0 2px 6px rgba(0,0,0,.3);
+    box-shadow: 0 4px 14px rgba(0,0,0,.28);
   }
+  .label.full { opacity: .7; }
+  .label .their { display: inline-flex; align-items: center; gap: 4px; font-weight: 500; color: rgba(235,235,245,.78); }
+  .label .arrow { opacity: .5; font-weight: 400; }
+  .label svg { display: block; }
+  .band-day { color: #30d158; }
+  .band-edge { color: #ff9f0a; }
+  .band-night { color: #a5a3ff; }
+  .count { font-size: 10px; padding: 1px 6px; border-radius: 6px; background: rgba(255,255,255,.18); }
 `;
 
 /**
@@ -106,27 +122,59 @@ function createPreview() {
    * @param {{top:number, left:number, width:number, height:number}} rect
    * @param {string} text 一覧に追加される文言と完全一致させること（呼び出し側の責務）
    * @param {'high'|'medium'|'low'} confidence
+   * @param {{their?:{text:string, band:string, iconSvg:string}, full?:boolean, countText?:string}} [extra]
+   *   their: 相手の時刻（相手のタイムゾーンが自分と異なる場合のみ）
+   *   full : 候補が上限に達している（追加できないことをグレーで示す）
    */
-  function showAt(rect, text, confidence) {
+  function showAt(rect, text, confidence, extra) {
     if (!rect || rect.width <= 0 || rect.height <= 0) {
       hide();
       return;
     }
     visible = true;
+    const opts = extra || {};
 
-    box.className = `box conf-${confidence}`;
+    box.className = `box conf-${confidence}${opts.full ? ' full' : ''}`;
     box.style.display = 'block';
     box.style.left = `${rect.left}px`;
     box.style.top = `${rect.top}px`;
     box.style.width = `${rect.width}px`;
     box.style.height = `${rect.height}px`;
 
-    label.textContent = text;
-    label.style.display = 'block';
+    label.className = `label${opts.full ? ' full' : ''}`;
+    label.textContent = '';
+    const main = document.createElement('span');
+    main.textContent = text;
+    label.appendChild(main);
+    let extraLen = 0;
+    if (opts.their && opts.their.text) {
+      const their = document.createElement('span');
+      their.className = 'their';
+      const arrow = document.createElement('span');
+      arrow.className = 'arrow';
+      arrow.textContent = '→';
+      const bandIcon = document.createElement('span');
+      bandIcon.className = `band-${opts.their.band}`;
+      // アイコンは icons.js が生成する固定のSVG文字列（外部入力を含まない）
+      bandIcon.innerHTML = opts.their.iconSvg || '';
+      const theirText = document.createElement('span');
+      theirText.textContent = opts.their.text;
+      their.append(arrow, bandIcon, theirText);
+      label.appendChild(their);
+      extraLen += opts.their.text.length + 4;
+    }
+    if (opts.full && opts.countText) {
+      const count = document.createElement('span');
+      count.className = 'count';
+      count.textContent = opts.countText;
+      label.appendChild(count);
+      extraLen += 5;
+    }
+    label.style.display = 'inline-flex';
     // ラベルは枠の左上のやや上に追従する。画面上端では枠の下側に出す。
-    const approxWidth = Math.max(80, text.length * 8);
+    const approxWidth = Math.max(80, (text.length + extraLen) * 7.5);
     const left = clampLabelLeft(rect.left, approxWidth);
-    const above = rect.top - 28;
+    const above = rect.top - 30;
     const top = above >= 4 ? above : rect.top + rect.height + 6;
     label.style.left = `${left}px`;
     label.style.top = `${top}px`;

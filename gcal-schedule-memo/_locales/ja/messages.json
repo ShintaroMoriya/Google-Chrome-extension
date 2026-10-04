@@ -127,7 +127,7 @@
     "message": "自動"
   },
   "tzMismatch": {
-    "message": "Googleカレンダーは$value$で表示されています。設定の「自分のタイムゾーン」を確認してください",
+    "message": "Googleカレンダーは$value$で表示されています。「自分のタイムゾーン」を合わせてください",
     "placeholders": {
       "value": {
         "content": "$1",

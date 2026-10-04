@@ -2,11 +2,17 @@
  * src/content.js — Googleカレンダー上の操作と日程アシストパネルの結線
  *
  * パネル表示中だけ、カレンダーの候補取得モードを有効にする。候補はクリック
- * 取得と手入力のどちらでも最大3件まで追加でき、定型メールへ差し込んでコピー
- * できる。外部送信は行わず、データはブラウザ内へ保存する。
+ * 取得と手入力のどちらでも最大3件まで追加でき、選んだ定型文に差し込んで
+ * コピーできる。外部送信は行わず、データはブラウザ内へ保存する。
  *
- * v1.2.0: 刻み(snapMin)・長さ(durationMin)・予定ブロックのクリック方法(chipMode)を
- * パネルから切り替えられるようにした。設定は state.settings に保存される。
+ * v2.0.0:
+ *   - 「相手の表示に合わせる」: 相手のタイムゾーン・言語・書式（state.settings.recipient）
+ *     でコピー文を作る。自分のタイムゾーンは自動（ブラウザ）か手動指定。
+ *   - 言葉に頼らないフィードバック: 上限・重複はシェイク、3件そろったらコピーを脈動。
+ *   - スピード: ショートカット（Alt+Shift+S で開閉、Alt+Shift+C でコピー）。
+ *     座標キャッシュはスクロール/リサイズで破棄する。
+ *   - Googleカレンダーの表示タイムゾーン（左上の GMT±hh）と自分のタイムゾーンが
+ *     食い違う場合は、候補を「推定」扱いにして設定に警告を出す（誤送信防止）。
  */
 'use strict';
 
@@ -17,11 +23,17 @@ const storeApi = globalThis.GSM.store;
 const panelApi = globalThis.GSM.panel;
 const previewApi = globalThis.GSM.preview;
 const templatesApi = globalThis.GSM.templates;
+const tzApi = globalThis.GSM.tz;
+const i18n = globalThis.GSM.i18n;
+const icons = globalThis.GSM.icons;
+const { t } = i18n;
 
 // パネルから選べる設定値（これ以外は保存しない）
 const ALLOWED_SNAP_MIN = [15, 30, 60];
 const ALLOWED_DURATION_MIN = [30, 60, 90, 120];
 const ALLOWED_CHIP_MODE = ['whole', 'slice'];
+const BAND_ICON = { day: 'sun', edge: 'sunrise', night: 'moon' };
+const CALENDAR_OFFSET_TTL_MS = 10000;
 
 const storage = storeApi.createStorage();
 let state = storeApi.freshState();
@@ -30,15 +42,62 @@ let preview = null;
 let saveTimer = null;
 let previewRaf = null;
 let lastPointerMoveEvent = null;
+let calendarOffsetCache = { at: 0, value: null };
 
 function scheduleSave() {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => storeApi.saveState(storage, state), 200);
 }
 
+// ---------------------------------------------------------------------------
+// タイムゾーン・言語の解決
+// ---------------------------------------------------------------------------
+
+function defaultOutLocale() {
+  const ui = i18n.uiLang();
+  if (/^ja/i.test(ui)) return 'ja';
+  return formatApi.normalizeLocale((typeof navigator !== 'undefined' && navigator.language) || ui);
+}
+
+function calendarOffset() {
+  const now = Date.now();
+  if (now - calendarOffsetCache.at > CALENDAR_OFFSET_TTL_MS) {
+    calendarOffsetCache = { at: now, value: extractApi.detectCalendarOffset(document) };
+  }
+  return calendarOffsetCache.value;
+}
+
+/**
+ * 描画・コピーに使う文脈を state から解決する。
+ * @param {boolean} [lite] true ならカレンダー表示TZの検出を省く（ホバー用）
+ * @returns {{myTz:string, targetTz:string, recipientIsMe:boolean, outLocale:string, uiLocale:string, tzMismatchLabel:?string}}
+ */
+function resolveContext(lite) {
+  const settings = state.settings || {};
+  const myTz = tzApi.resolveTz(settings.myTz || tzApi.localTz());
+  const recipient = settings.recipient || {};
+  const recipientTz = recipient.tz && tzApi.isValidTz(recipient.tz) ? recipient.tz : null;
+  // ホバー（pointermove）では重いDOM走査を避けるため、食い違い検出を省く。
+  const calOff = lite ? null : calendarOffset();
+  let tzMismatchLabel = null;
+  if (calOff != null && calOff !== tzApi.offsetMinutes(myTz, Date.now())) {
+    const sign = calOff >= 0 ? '+' : '-';
+    const abs = Math.abs(calOff);
+    tzMismatchLabel = `GMT${sign}${Math.floor(abs / 60)}${abs % 60 ? `:${String(abs % 60).padStart(2, '0')}` : ''}`;
+  }
+  return {
+    myTz,
+    targetTz: recipientTz || myTz,
+    recipientIsMe: !recipientTz,
+    outLocale: formatApi.normalizeLocale(recipient.locale || defaultOutLocale()),
+    uiLocale: i18n.uiLang(),
+    tzMismatchLabel
+  };
+}
+
 function setState(next) {
   state = next;
-  if (panel) panel.render(state);
+  if (panel) panel.render(state, resolveContext());
   applyPickModeAttr();
   if (preview && !state.panel.pickMode) preview.hide();
   scheduleSave();
@@ -52,7 +111,7 @@ function injectAffordanceStyle() {
   const style = document.createElement('style');
   style.textContent = `
     html[data-gsm-pick="on"] [role="main"] [data-datekey] { cursor: crosshair !important; }
-    html[data-gsm-pick="on"] [role="main"] { outline: 2px solid rgba(26,115,232,.45); outline-offset: -2px; }
+    html[data-gsm-pick="on"] [role="main"] { outline: 2px solid rgba(10,132,255,.5); outline-offset: -2px; }
   `;
   (document.head || document.documentElement).appendChild(style);
 }
@@ -92,6 +151,11 @@ function inGrid(target) {
   return !!target.closest('[role="main"]');
 }
 
+/** 抽出エラー/警告コードを表示文言へ。v1で保存された日本語の文字列はそのまま出す。 */
+function errorText(code) {
+  return t(`err_${code}`) || String(code || '');
+}
+
 /**
  * 現在の設定を、extract.js に渡すオプションへ変換する。
  * @returns {{durationMin:number, snapMin:number, chipMode:string}}
@@ -106,19 +170,50 @@ function pickOptions() {
 }
 
 /**
+ * 追加時点の自分のタイムゾーンを付け、カレンダー表示TZとの食い違いを確度に反映する。
+ */
+function withTimeZone(pick, ctx) {
+  const next = Object.assign({}, pick, { tz: ctx.myTz });
+  if (pick.source !== 'manual') {
+    const calOff = calendarOffset();
+    if (calOff != null) {
+      const startMs = tzApi.zonedToEpoch(pick.y, pick.m, pick.d, pick.sh, pick.sm, ctx.myTz);
+      if (calOff !== tzApi.offsetMinutes(ctx.myTz, startMs)) {
+        next.warning = extractApi.WARN.TZ_MISMATCH;
+        if (next.confidence === 'high') next.confidence = 'medium';
+      }
+    }
+  }
+  return next;
+}
+
+/**
  * 候補を状態へ追加し、UIに即時反映する。
  * @param {object} pick
- * @returns {{ok:boolean,message?:string}}
+ * @returns {{ok:boolean,message?:string,shake?:boolean}}
  */
 function addPick(pick) {
-  if (pick.error) return { ok: false, message: pick.error };
-  const outcome = storeApi.addEntry(state, pick);
-  if (outcome.result === 'duplicate') return { ok: false, message: '同じ日時はすでに追加済みです' };
-  if (outcome.result === 'full') return { ok: false, message: '候補は3件までです。不要な候補を削除してください' };
-  setState(outcome.state);
-  const added = outcome.state.entries[outcome.state.entries.length - 1];
-  requestAnimationFrame(() => panel.flashEntry(added.id));
-  if (pick.warning) panel.showToast(pick.warning);
+  if (pick.error) return { ok: false, message: errorText(pick.error) };
+  const ctx = resolveContext();
+  const outcome = storeApi.addEntry(state, withTimeZone(pick, ctx));
+  if (outcome.result === 'duplicate') {
+    const dup = state.entries.find((entry) => storeApi.isSameSlot(entry, pick));
+    if (panel) panel.shake(dup && dup.id);
+    return { ok: false, message: t('toastDuplicate') };
+  }
+  if (outcome.result === 'full') {
+    if (panel) panel.shake();
+    return { ok: false, message: t('toastFull'), shake: true };
+  }
+  let next = outcome.state;
+  if (!next.settings.onboarded) next = storeApi.setSettings(next, { onboarded: true });
+  setState(next);
+  const added = next.entries[next.entries.length - 1];
+  requestAnimationFrame(() => {
+    panel.flashEntry(added.id);
+    if (next.entries.length >= storeApi.MAX_ENTRIES) panel.pulseCopy();
+  });
+  if (added.warning === extractApi.WARN.TZ_MISMATCH) panel.showToast(t('warn_tzMismatch'));
   return { ok: true };
 }
 
@@ -137,15 +232,29 @@ function handlePick(event) {
 
 /**
  * パネルの設定変更を検証して保存する。許可値以外は無視する。
- * @param {{snapMin?:number, durationMin?:number, chipMode?:string}} patch
+ * @param {{snapMin?:number, durationMin?:number, chipMode?:string, myTz?:?string}} patch
  */
 function changeSettings(patch) {
   const next = {};
   if (ALLOWED_SNAP_MIN.includes(patch.snapMin)) next.snapMin = patch.snapMin;
   if (ALLOWED_DURATION_MIN.includes(patch.durationMin)) next.durationMin = patch.durationMin;
   if (ALLOWED_CHIP_MODE.includes(patch.chipMode)) next.chipMode = patch.chipMode;
+  if ('myTz' in patch && (patch.myTz === null || tzApi.isValidTz(patch.myTz))) next.myTz = patch.myTz;
   if (!Object.keys(next).length) return;
   setState(storeApi.setSettings(state, next));
+}
+
+function changeRecipient(patch) {
+  const next = {};
+  if ('tz' in patch && (patch.tz === null || tzApi.isValidTz(patch.tz))) next.tz = patch.tz;
+  if ('locale' in patch && (patch.locale === null || formatApi.OUTPUT_LOCALES.includes(patch.locale))) next.locale = patch.locale;
+  if (!Object.keys(next).length) return;
+  setState(storeApi.setRecipient(state, next));
+}
+
+function changeTemplate(templateId) {
+  if (!templatesApi.TEMPLATE_IDS.includes(templateId)) return;
+  setState(storeApi.setSettings(state, { templateId }));
 }
 
 /**
@@ -158,7 +267,7 @@ function parseManualCandidate(value) {
   const startMatch = /^(\d{2}):(\d{2})$/.exec(value.start || '');
   const endMatch = /^(\d{2}):(\d{2})$/.exec(value.end || '');
   if (!dateMatch || !startMatch || !endMatch) {
-    return { ok: false, message: '日付・開始時刻・終了時刻をすべて入力してください' };
+    return { ok: false, message: t('err_invalidManual') };
   }
   const y = Number(dateMatch[1]);
   const m = Number(dateMatch[2]);
@@ -170,12 +279,41 @@ function parseManualCandidate(value) {
   const date = new Date(y, m - 1, d);
   const validDate = date.getFullYear() === y && date.getMonth() === m - 1 && date.getDate() === d;
   const validTime = sh < 24 && eh < 24 && sm < 60 && em < 60;
-  if (!validDate || !validTime) return { ok: false, message: '入力した日時を確認してください' };
-  if (eh * 60 + em <= sh * 60 + sm) return { ok: false, message: '終了時刻は開始時刻より後にしてください' };
+  if (!validDate || !validTime) return { ok: false, message: t('err_invalidManual') };
+  if (eh * 60 + em <= sh * 60 + sm) return { ok: false, message: t('err_endBeforeStart') };
   return {
     ok: true,
     pick: { y, m, d, sh, sm, eh, em, confidence: 'high', source: 'manual' }
   };
+}
+
+// ---------------------------------------------------------------------------
+// ホバープレビュー
+// ---------------------------------------------------------------------------
+
+function previewExtra(pick, ctx) {
+  const extra = {};
+  if (state.entries.length >= storeApi.MAX_ENTRIES) {
+    extra.full = true;
+    extra.countText = `${state.entries.length}/${storeApi.MAX_ENTRIES}`;
+  }
+  if (!ctx.recipientIsMe) {
+    const entry = Object.assign({}, pick, { tz: ctx.myTz });
+    const parts = formatApi.slotParts(entry, { locale: ctx.outLocale, targetTz: ctx.targetTz, sourceTz: ctx.myTz });
+    extra.their = {
+      text: `${parts.time}${parts.tzName ? ` ${parts.tzName}` : ''}`,
+      band: parts.slot.band,
+      iconSvg: icons.icon(BAND_ICON[parts.slot.band], 13)
+    };
+  }
+  return extra;
+}
+
+function showPreviewFor(rect, pick) {
+  const ctx = resolveContext(true);
+  const uiLoc = formatApi.normalizeLocale(ctx.uiLocale);
+  const text = formatApi.formatSlot(Object.assign({}, pick, { tz: ctx.myTz }), { locale: uiLoc, targetTz: ctx.myTz });
+  preview.showAt(rect, text, pick.confidence, previewExtra(pick, ctx));
 }
 
 function updatePreview(event) {
@@ -191,7 +329,7 @@ function updatePreview(event) {
       preview.hide();
       return;
     }
-    preview.showAt(hit.rect, formatApi.formatEntry(hit.pick), hit.pick.confidence);
+    showPreviewFor(hit.rect, hit.pick);
     return;
   }
   const slot = extractApi.resolveSlotPreview(
@@ -203,7 +341,7 @@ function updatePreview(event) {
     preview.hide();
     return;
   }
-  preview.showAt(slot.rect, formatApi.formatEntry(slot.pick), slot.pick.confidence);
+  showPreviewFor(slot.rect, slot.pick);
 }
 
 function onPointerMove(event) {
@@ -218,6 +356,10 @@ function onPointerMove(event) {
 function onPointerLeaveDoc() {
   lastPointerMoveEvent = null;
   if (preview) preview.hide();
+}
+
+function onLayoutChange() {
+  extractApi.invalidateCaches();
 }
 
 function onCapture(event) {
@@ -247,7 +389,14 @@ function onCapture(event) {
 }
 
 function onKeydown(event) {
-  if (event.key === 'Escape' && state.panel.pickMode) {
+  if (event.key !== 'Escape') return;
+  // Esc は「シートを閉じる」→「取得モードを止める」の順に1段ずつ戻る。
+  if (panel && state.panel.visible && panel.isSheetOpen()) {
+    event.stopPropagation();
+    panel.closeSheet();
+    return;
+  }
+  if (state.panel.pickMode) {
     event.stopPropagation();
     setState(storeApi.setPanel(state, { pickMode: false }));
   }
@@ -262,17 +411,35 @@ function ensureAttached() {
   if (panel && !panel.host.isConnected) document.documentElement.appendChild(panel.host);
 }
 
-function copyCandidates() {
-  const text = formatApi.formatAll(state.entries);
-  if (!text) return Promise.resolve({ ok: false, message: '候補日時を追加してください' });
-  return copyToClipboard(text).then((ok) => ({ ok, message: ok ? '候補日時をコピーしました' : 'コピーに失敗しました' }));
+// ---------------------------------------------------------------------------
+// コピー
+// ---------------------------------------------------------------------------
+
+function buildCopyText() {
+  const ctx = resolveContext(true);
+  const lang = formatApi.langOf(ctx.outLocale);
+  const formatAll = (list) => formatApi.formatAllFor(list, { locale: ctx.outLocale, targetTz: ctx.targetTz, sourceTz: ctx.myTz });
+  const templateId = templatesApi.TEMPLATE_IDS.includes(state.settings.templateId) ? state.settings.templateId : 'schedule-request';
+  const template = templatesApi.findTemplate(templateId, lang);
+  return { text: templatesApi.renderTemplate(template, state.entries, formatAll, lang), ctx };
 }
 
-function copyTemplate(templateId) {
-  if (!state.entries.length) return Promise.resolve({ ok: false, message: '先に候補日時を追加してください' });
-  const template = templatesApi.findTemplate(templateId);
-  const text = templatesApi.renderTemplate(template, state.entries, formatApi.formatAll);
-  return copyToClipboard(text).then((ok) => ({ ok, message: ok ? 'メール本文をコピーしました' : 'コピーに失敗しました' }));
+async function copyCurrent() {
+  if (!state.entries.length) return { ok: false, message: t('toastNeedSlots') };
+  const { text, ctx } = buildCopyText();
+  const ok = await copyToClipboard(text);
+  if (ok && !ctx.recipientIsMe) {
+    // 実際に使った相手だけを「最近」に残す（次回はワンタップで呼び出せる）。
+    setState(storeApi.pushRecentRecipient(state, { tz: ctx.targetTz, locale: state.settings.recipient.locale || null }));
+  }
+  return { ok, message: ok ? t('copied') : t('copyFailed') };
+}
+
+async function copyFromShortcut() {
+  if (!state.panel.visible) setState(storeApi.setPanel(state, { visible: true }));
+  const result = await copyCurrent();
+  if (panel) panel.showToast(result.message, result.ok ? 'ok' : 'error');
+  if (!result.ok && !state.entries.length && panel) panel.shake();
 }
 
 function addManualCandidate(value) {
@@ -284,12 +451,13 @@ function addManualCandidate(value) {
 function bootstrap() {
   injectAffordanceStyle();
   panel = panelApi.createPanel({
-    onCopyCandidates: copyCandidates,
-    onCopyTemplate: copyTemplate,
+    onCopy: copyCurrent,
     onAddManual: addManualCandidate,
     onRemove: (id) => setState(storeApi.removeEntry(state, id)),
     onClearAll: () => setState(storeApi.clearEntries(state)),
     onPickModeToggle: (on) => setState(storeApi.setPanel(state, { pickMode: on })),
+    onTemplateChange: changeTemplate,
+    onRecipientChange: changeRecipient,
     onSettingsChange: changeSettings,
     onMoveEnd: (x, y) => setState(storeApi.setPanel(state, { x, y })),
     onCloseClick: () => setState(storeApi.setPanel(state, { visible: false, pickMode: false }))
@@ -298,7 +466,7 @@ function bootstrap() {
 
   storeApi.loadState(storage).then((loaded) => {
     state = loaded;
-    panel.render(state);
+    panel.render(state, resolveContext());
     applyPickModeAttr();
   });
 
@@ -307,13 +475,17 @@ function bootstrap() {
   });
   window.addEventListener('keydown', onKeydown, { capture: true });
   window.addEventListener('pointermove', onPointerMove, { passive: true });
+  window.addEventListener('scroll', onLayoutChange, { capture: true, passive: true });
+  window.addEventListener('resize', onLayoutChange, { passive: true });
   document.addEventListener('mouseleave', onPointerLeaveDoc);
   new MutationObserver(ensureAttached).observe(document.documentElement, { childList: true });
   setInterval(ensureAttached, 3000);
 
   if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage) {
     chrome.runtime.onMessage.addListener((message) => {
-      if (message && message.type === 'GSM_TOGGLE_PANEL') togglePanelVisible();
+      if (!message) return;
+      if (message.type === 'GSM_TOGGLE_PANEL') togglePanelVisible();
+      if (message.type === 'GSM_COPY') copyFromShortcut();
     });
   }
 }
